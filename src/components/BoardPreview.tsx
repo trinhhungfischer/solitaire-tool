@@ -25,6 +25,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
   const [resetCount, setResetCount] = useState<number>(0);
   const [cardsDrawnSinceLastMove, setCardsDrawnSinceLastMove] = useState(0);
   const [autoReshuffleCount, setAutoReshuffleCount] = useState(0);
+  const [isAutoRetryingQuickSolve, setIsAutoRetryingQuickSolve] = useState(false);
   const [isQuickSolving, setIsQuickSolving] = useState(false);
   const [quickSolvePath, setQuickSolvePath] = useState<GameState[] | null>(null);
   const [showLog, setShowLog] = useState(false);
@@ -258,12 +259,32 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
       const path = solveGame(gameState, gameRule, 50000);
       if (path && path.length > 0) {
         setQuickSolvePath(path);
+        setIsAutoRetryingQuickSolve(false);
       } else {
-        alert("Quick Solve failed: The board is unwinnable from the current state.");
         setIsQuickSolving(false);
+        const hasUnrevealed = gameState.cols.some(c => c.some(card => !card.isRevealed));
+        if (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && !hasUnrevealed) {
+          alert("Quick Solve failed: The board is unwinnable from the current state.");
+          setIsAutoRetryingQuickSolve(false);
+        } else {
+          // Board is stuck for Quick Solve, let's automatically shuffle and try again!
+          setIsAutoRetryingQuickSolve(true);
+          handleReshuffle(true); // This will update gameState and trigger the retry effect
+        }
       }
     }, 50);
   };
+
+  // Auto retry Quick Solve after a reshuffle
+  useEffect(() => {
+    if (isAutoRetryingQuickSolve && !isQuickSolving && gameState) {
+      // Delay slightly so the user sees the reshuffle animation before it freezes to solve again
+      const timer = setTimeout(() => {
+        handleQuickSolve();
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [gameState, isAutoRetryingQuickSolve, isQuickSolving]);
 
   const handleReshuffle = (isAutoTrigger = false) => {
     const hasUnrevealed = gameState?.cols.some(c => c.some(card => !card.isRevealed));
