@@ -110,7 +110,7 @@ export function solveGame(initialState: GameState, gameRule: string, maxIteratio
       nextStates.push({ ...state, drawPile: newDraw, wastePile: [...state.wastePile, card], moves: state.moves + 1 });
     } else if (state.wastePile.length > 0) {
       // Recycle waste
-      nextStates.push({ ...state, drawPile: [...state.wastePile], wastePile: [], moves: state.moves + 1, lastAction: 'Lật lại Nọc bài' });
+      nextStates.push({ ...state, drawPile: [...state.wastePile], wastePile: [], moves: state.moves + 1, lastAction: 'Chuyển Waste về Stock' });
     }
 
     // Heuristic Sorting

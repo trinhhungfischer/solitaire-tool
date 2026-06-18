@@ -102,7 +102,7 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
     }
     
     const cardName = bottomCardToMove.wordText || bottomCardToMove.wordImageKey || 'Card';
-    const sourceName = source.type === 'col' ? `Cột ${source.index + 1}` : source.type === 'waste' ? 'Nọc bài' : `Foundation ${source.index + 1}`;
+    const sourceName = source.type === 'col' ? `Cột ${source.index + 1}` : source.type === 'waste' ? 'Waste' : `Foundation ${source.index + 1}`;
     const destName = destType === 'col' ? `Cột ${destIndex + 1}` : `Slot ${destIndex + 1}`;
     
     newState.lastAction = `Di chuyển [${cardName}] từ ${sourceName} sang ${destName}`;

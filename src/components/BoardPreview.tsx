@@ -132,10 +132,12 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
         
         if (gameState.drawPile.length > 0) {
           const newDraw = [...gameState.drawPile];
-          const card = newDraw.shift()!;
-          setGameState({ ...gameState, drawPile: newDraw, wastePile: [...gameState.wastePile, card], moves: gameState.moves + 1, lastAction: 'Bot: Rút 1 lá bài' });
+          const card = newDraw.shift();
+          if (card) {
+            setGameState({ ...gameState, drawPile: newDraw, wastePile: [...gameState.wastePile, card], moves: gameState.moves + 1, lastAction: 'Bot: Rút 1 lá từ Stock' });
+          }
         } else {
-          setGameState({ ...gameState, drawPile: [...gameState.wastePile], wastePile: [], moves: gameState.moves + 1, lastAction: 'Bot: Lật lại Nọc bài' });
+          setGameState({ ...gameState, drawPile: [...gameState.wastePile], wastePile: [], moves: gameState.moves + 1, lastAction: 'Bot: Chuyển Waste về Stock' });
         }
         return;
       }
@@ -193,13 +195,13 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
       if (prev.drawPile.length > 0) {
         const newDraw = [...prev.drawPile];
         const card = newDraw.shift()!;
-        return { ...prev, drawPile: newDraw, wastePile: [...prev.wastePile, card], moves: prev.moves + 1, lastAction: 'Người chơi: Rút 1 lá bài' };
+        return { ...prev, drawPile: newDraw, wastePile: [...prev.wastePile, card], moves: prev.moves + 1, lastAction: 'Người chơi: Rút 1 lá từ Stock' };
       } else {
         if (prev.wastePile.length === 0) {
           setHistory(h => h.slice(0, -1));
           return prev;
         }
-        return { ...prev, drawPile: [...prev.wastePile], wastePile: [], moves: prev.moves + 1, lastAction: 'Người chơi: Lật lại Nọc bài' };
+        return { ...prev, drawPile: [...prev.wastePile], wastePile: [], moves: prev.moves + 1, lastAction: 'Người chơi: Chuyển Waste về Stock' };
       }
     });
   };
