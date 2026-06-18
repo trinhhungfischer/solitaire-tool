@@ -246,11 +246,19 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
   };
 
   const handleUndo = () => {
-    if (history.length > 0) {
+    if (history.length > 0 && !isAutoPlaying && !isQuickSolving) {
       const prevState = history[history.length - 1];
       setGameState(prevState);
       setHistory(history.slice(0, -1));
     }
+  };
+
+  const handleTimeTravel = (historyIndex: number) => {
+    if (isAutoPlaying || isQuickSolving) return;
+    const prevState = history[historyIndex];
+    setGameState(prevState);
+    setHistory(history.slice(0, historyIndex));
+    setCardsDrawnSinceLastMove(0);
   };
 
   const handleQuickSolve = () => {
@@ -710,7 +718,12 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
           ) : (
             <>
               {history.map((h, i) => h.lastAction && (
-                <div key={`log-${i}`} className="text-sm px-3 py-2 rounded bg-black/20 text-white/70 font-mono border-l-2 border-transparent">
+                <div 
+                  key={`log-${i}`} 
+                  onClick={() => handleTimeTravel(i)}
+                  className="text-sm px-3 py-2 rounded bg-black/20 text-white/70 font-mono border-l-2 border-transparent hover:bg-white/10 hover:border-white/30 cursor-pointer transition-colors"
+                  title="Click để tua về thời điểm này"
+                >
                   <span className="text-white/40 w-8 inline-block">#{h.moves}</span> {h.lastAction}
                 </div>
               ))}
