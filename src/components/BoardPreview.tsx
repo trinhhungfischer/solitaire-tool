@@ -1,9 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import type { CardData } from './CardBuilder';
-import { RefreshCw, Image as ImageIcon, Eye, EyeOff, Undo2 } from 'lucide-react';
+import { RefreshCw, Image as ImageIcon, Eye, EyeOff, Undo2, Shuffle, Zap, ClipboardList, X } from 'lucide-react';
 import { computeDropState } from '../lib/gameLogic';
 import type { PlayableCard, GameState } from '../lib/gameLogic';
 import { getBestAutoMove } from '../lib/autoPlay';
+import { solveGame } from '../lib/solver';
 
 interface BoardPreviewProps {
   foundationCount: number;
@@ -16,12 +17,17 @@ interface BoardPreviewProps {
   gameRule?: 'classic' | 'new';
 }
 
-export default function BoardPreview({ foundationCount, columnCards, data, shuffleSeed, maxMoves, isAutoPlaying, onStopAutoPlay, gameRule = 'new' }: BoardPreviewProps) {
+export default function BoardPreview({ foundationCount, columnCards, data, maxMoves, isAutoPlaying, onStopAutoPlay, gameRule = 'new' }: BoardPreviewProps) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [history, setHistory] = useState<GameState[]>([]);
   const [showHiddenCards, setShowHiddenCards] = useState<boolean>(false);
   const [resetCount, setResetCount] = useState<number>(0);
   const [cardsDrawnSinceLastMove, setCardsDrawnSinceLastMove] = useState(0);
+  const [autoReshuffleCount, setAutoReshuffleCount] = useState(0);
+  const [isQuickSolving, setIsQuickSolving] = useState(false);
+  const [quickSolvePath, setQuickSolvePath] = useState<GameState[] | null>(null);
+  const [showLog, setShowLog] = useState(false);
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   const shuffledData = useMemo(() => {
     const arr: PlayableCard[] = data.map(c => ({
@@ -32,13 +38,45 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
   }, [data]);
 
   useEffect(() => {
-    if (!isAutoPlaying || !gameState) return;
+    if (showLog && logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [gameState?.lastAction, showLog, history.length]);
+
+  useEffect(() => {
+    if (!isAutoPlaying) {
+      setAutoReshuffleCount(0);
+    }
+  }, [isAutoPlaying]);
+
+  useEffect(() => {
+    if (!isQuickSolving || !quickSolvePath || quickSolvePath.length === 0) return;
+    
+    const interval = setInterval(() => {
+      const nextState = quickSolvePath[0];
+      setHistory(h => [...h, gameState!]);
+      setGameState(nextState);
+      
+      const newPath = quickSolvePath.slice(1);
+      setQuickSolvePath(newPath);
+      
+      if (newPath.length === 0) {
+        setIsQuickSolving(false);
+      }
+    }, 50); // Super fast 50ms interval for Quick Solve
+    
+    return () => clearInterval(interval);
+  }, [isQuickSolving, quickSolvePath, gameState]);
+
+  useEffect(() => {
+    if (!isAutoPlaying || !gameState || isQuickSolving) return;
     
     const interval = setInterval(() => {
       const bestMove = getBestAutoMove(gameState, gameRule);
       if (bestMove) {
         setHistory(h => [...h, gameState]);
         setCardsDrawnSinceLastMove(0);
+        setAutoReshuffleCount(0); // Reset reshuffles if we made progress
         setGameState(bestMove);
         return;
       }
@@ -46,6 +84,43 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
       if (gameState.drawPile.length > 0 || gameState.wastePile.length > 0) {
         const deckSize = gameState.drawPile.length + gameState.wastePile.length;
         if (cardsDrawnSinceLastMove > deckSize + 1 && deckSize > 0) {
+          if (autoReshuffleCount < 5) {
+            setHistory(h => [...h, gameState]);
+            
+            const pool = [...gameState.drawPile, ...gameState.wastePile];
+            const newCols = gameState.cols.map(col => {
+              const newCol = [];
+              for (const card of col) {
+                if (!card.isRevealed) pool.push(card);
+                else newCol.push(card);
+              }
+              return newCol;
+            });
+
+            for (let i = pool.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [pool[i], pool[j]] = [pool[j], pool[i]];
+            }
+
+            const finalCols = gameState.cols.map((oldCol, colIndex) => {
+              const newCol = [];
+              const faceUpCards = newCols[colIndex];
+              const unrevealedCount = oldCol.length - faceUpCards.length;
+              for (let i = 0; i < unrevealedCount; i++) {
+                newCol.push({ ...pool.pop()!, isRevealed: false });
+              }
+              newCol.push(...faceUpCards);
+              return newCol;
+            });
+
+            const newDrawPile = pool.map(c => ({ ...c, isRevealed: true }));
+
+            setGameState({ ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: 'Bot bị kẹt -> 🔀 Tự động Super Reshuffle' });
+            setCardsDrawnSinceLastMove(0);
+            setAutoReshuffleCount(c => c + 1);
+            return;
+          }
+
           if (onStopAutoPlay) onStopAutoPlay();
           return;
         }
@@ -56,9 +131,9 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
         if (gameState.drawPile.length > 0) {
           const newDraw = [...gameState.drawPile];
           const card = newDraw.shift()!;
-          setGameState({ ...gameState, drawPile: newDraw, wastePile: [...gameState.wastePile, card], moves: gameState.moves + 1 });
+          setGameState({ ...gameState, drawPile: newDraw, wastePile: [...gameState.wastePile, card], moves: gameState.moves + 1, lastAction: 'Bot: Rút 1 lá bài' });
         } else {
-          setGameState({ ...gameState, drawPile: [...gameState.wastePile].reverse(), wastePile: [], moves: gameState.moves + 1 });
+          setGameState({ ...gameState, drawPile: [...gameState.wastePile], wastePile: [], moves: gameState.moves + 1, lastAction: 'Bot: Lật lại Nọc bài' });
         }
         return;
       }
@@ -91,10 +166,16 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
     }
     
     const drawPile = shuffledData.slice(cardIndex).map(c => ({ ...c, isRevealed: true }));
-    const wastePile: PlayableCard[] = [];
     const foundations: PlayableCard[][] = Array.from({ length: foundationCount }, () => []);
 
-    setGameState({ drawPile, wastePile, cols, foundations, moves: 0 });
+    setGameState({
+      drawPile: [...drawPile],
+      wastePile: [],
+      cols,
+      foundations,
+      moves: 0,
+      lastAction: '🎲 Ván bài mới: Đã trộn và chia bài'
+    });
     setHistory([]);
   }, [shuffledData, columnCards, foundationCount, resetCount]);
 
@@ -110,13 +191,13 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
       if (prev.drawPile.length > 0) {
         const newDraw = [...prev.drawPile];
         const card = newDraw.shift()!;
-        return { ...prev, drawPile: newDraw, wastePile: [...prev.wastePile, card], moves: prev.moves + 1 };
+        return { ...prev, drawPile: newDraw, wastePile: [...prev.wastePile, card], moves: prev.moves + 1, lastAction: 'Người chơi: Rút 1 lá bài' };
       } else {
         if (prev.wastePile.length === 0) {
           setHistory(h => h.slice(0, -1));
           return prev;
         }
-        return { ...prev, drawPile: [...prev.wastePile].reverse(), wastePile: [], moves: prev.moves + 1 };
+        return { ...prev, drawPile: [...prev.wastePile], wastePile: [], moves: prev.moves + 1, lastAction: 'Người chơi: Lật lại Nọc bài' };
       }
     });
   };
@@ -161,13 +242,69 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
   };
 
   const handleUndo = () => {
-    if (history.length === 0) return;
-    const prevState = history[history.length - 1];
-    setGameState(prevState);
-    setHistory(h => h.slice(0, -1));
+    if (history.length > 0) {
+      const prevState = history[history.length - 1];
+      setGameState(prevState);
+      setHistory(history.slice(0, -1));
+    }
+  };
+
+  const handleQuickSolve = () => {
+    if (!gameState || isAutoPlaying || isQuickSolving) return;
+    setIsQuickSolving(true);
+    // Timeout to allow React to render any loading state if needed
+    setTimeout(() => {
+      const path = solveGame(gameState, gameRule, 50000);
+      if (path && path.length > 0) {
+        setQuickSolvePath(path);
+      } else {
+        alert("Quick Solve failed: The board is unwinnable from the current state.");
+        setIsQuickSolving(false);
+      }
+    }, 50);
+  };
+
+  const handleReshuffle = () => {
+    const hasUnrevealed = gameState?.cols.some(c => c.some(card => !card.isRevealed));
+    if (!gameState || isAutoPlaying || isQuickSolving || (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && !hasUnrevealed)) return;
+    
+    setHistory(h => [...h, gameState]);
+    
+    const pool = [...gameState.drawPile, ...gameState.wastePile];
+    const newCols = gameState.cols.map(col => {
+      const newCol = [];
+      for (const card of col) {
+        if (!card.isRevealed) pool.push(card);
+        else newCol.push(card);
+      }
+      return newCol;
+    });
+
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+
+    const finalCols = gameState.cols.map((oldCol, colIndex) => {
+      const newCol = [];
+      const faceUpCards = newCols[colIndex];
+      const unrevealedCount = oldCol.length - faceUpCards.length;
+      for (let i = 0; i < unrevealedCount; i++) {
+        newCol.push({ ...pool.pop()!, isRevealed: false });
+      }
+      newCol.push(...faceUpCards);
+      return newCol;
+    });
+
+    const newDrawPile = pool.map(c => ({ ...c, isRevealed: true }));
+
+    setGameState({ ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: 'Người chơi: 🔀 Super Reshuffle' });
+    setCardsDrawnSinceLastMove(0);
   };
 
   if (!gameState) return null;
+
+  const cardsLeft = gameState.cols.reduce((sum, c) => sum + c.length, 0) + gameState.drawPile.length + gameState.wastePile.length;
 
   const renderCard = (card: PlayableCard, isCovered: boolean = false, stackDirection: 'vertical' | 'horizontal' | 'none' = 'none') => {
     const renderFormula = (sizeClass: string) => {
@@ -244,6 +381,25 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-3">
         <div className="bg-[#143d22]/80 backdrop-blur-sm p-1.5 rounded-xl border border-white/10 flex flex-col gap-1 shadow-lg">
           <button 
+            onClick={handleQuickSolve}
+            disabled={isAutoPlaying || isQuickSolving}
+            className="p-2.5 rounded-lg transition-colors flex items-center justify-center text-white/70 hover:bg-white/10 hover:text-yellow-400 disabled:opacity-30 disabled:hover:text-white/70"
+            title="Quick Solve (Instant Complete)"
+          >
+            <Zap className={`w-5 h-5 ${isQuickSolving ? 'animate-pulse text-yellow-400' : ''}`} />
+          </button>
+          
+          <div className="w-8 h-px bg-white/10 mx-auto my-1"></div>
+
+          <button 
+            onClick={() => setShowLog(!showLog)}
+            className={`p-2.5 rounded-lg transition-colors flex items-center justify-center tooltip-trigger ${showLog ? 'bg-indigo-500 text-white' : 'hover:bg-white/10 text-white/70 hover:text-white'}`}
+            title="Toggle Game Log"
+          >
+            <ClipboardList className="w-5 h-5" />
+          </button>
+          
+          <button 
             onClick={() => setShowHiddenCards(!showHiddenCards)}
             className={`p-2.5 rounded-lg transition-colors flex items-center justify-center tooltip-trigger ${showHiddenCards ? 'bg-solitaire-green text-white' : 'hover:bg-white/10 text-white/70 hover:text-white'}`}
             title="Toggle hidden cards visibility"
@@ -252,12 +408,22 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
           </button>
           <button 
             onClick={handleUndo}
-            disabled={history.length === 0}
-            className="p-2.5 rounded-lg transition-colors flex items-center justify-center text-white/70 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
-            title="Undo last move"
+            disabled={history.length === 0 || isAutoPlaying || isQuickSolving}
+            className="p-2.5 rounded-lg transition-colors flex items-center justify-center text-white/70 hover:bg-white/10 hover:text-white disabled:opacity-30"
+            title="Undo"
           >
             <Undo2 className="w-5 h-5" />
           </button>
+          
+          <button 
+            onClick={handleReshuffle}
+            disabled={isAutoPlaying || isQuickSolving || !gameState || (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && !gameState.cols.some(c => c.some(card => !card.isRevealed)))}
+            className="p-2.5 rounded-lg transition-colors flex items-center justify-center text-white/70 hover:bg-white/10 hover:text-yellow-400 disabled:opacity-30"
+            title="Super Reshuffle Deck"
+          >
+            <Shuffle className="w-5 h-5" />
+          </button>
+
           <div className="w-8 h-px bg-white/10 mx-auto my-1"></div>
           <button 
             onClick={handleRestart}
@@ -429,6 +595,49 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
             </div>
           ))}
           </div>
+        </div>
+        <div className="absolute top-4 right-4 bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-white font-medium border border-white/20 shadow-lg z-50">
+          Moves: {gameState.moves} | Cards: {cardsLeft}
+          {isQuickSolving && <div className="text-yellow-300 text-sm mt-1 animate-pulse">Calculating Path...</div>}
+        </div>
+      </div>
+
+      {/* Game Log Drawer */}
+      <div 
+        className={`absolute bottom-0 left-0 right-0 bg-[#0f2e1a]/95 backdrop-blur-lg border-t border-white/20 shadow-2xl transition-transform duration-300 ease-in-out z-40 flex flex-col ${showLog ? 'translate-y-0' : 'translate-y-full'}`}
+        style={{ height: '35vh' }}
+      >
+        <div className="flex justify-between items-center px-6 py-3 border-b border-white/10 shrink-0">
+          <h3 className="text-white font-semibold flex items-center gap-2">
+            <ClipboardList className="w-5 h-5 text-indigo-400" />
+            Nhật Ký Nước Đi
+          </h3>
+          <button 
+            onClick={() => setShowLog(false)}
+            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/70 hover:text-white"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+          {history.length === 0 && !gameState.lastAction ? (
+            <div className="text-white/40 italic text-center py-4">Chưa có nước đi nào...</div>
+          ) : (
+            <>
+              {history.map((h, i) => h.lastAction && (
+                <div key={`log-${i}`} className="text-sm px-3 py-2 rounded bg-black/20 text-white/70 font-mono border-l-2 border-transparent">
+                  <span className="text-white/40 w-8 inline-block">#{h.moves}</span> {h.lastAction}
+                </div>
+              ))}
+              {gameState.lastAction && (
+                <div className="text-sm px-3 py-2 rounded bg-indigo-500/20 text-indigo-100 font-mono border-l-2 border-indigo-400">
+                  <span className="text-indigo-400/60 w-8 inline-block">#{gameState.moves}</span> {gameState.lastAction}
+                </div>
+              )}
+              <div ref={logEndRef} />
+            </>
+          )}
         </div>
       </div>
     </div>

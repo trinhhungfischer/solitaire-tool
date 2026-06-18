@@ -11,6 +11,7 @@ export interface GameState {
   cols: PlayableCard[][];
   foundations: PlayableCard[][];
   moves: number;
+  lastAction?: string;
 }
 
 export function computeDropState(prevState: GameState, source: any, destType: 'col' | 'foundation', destIndex: number, gameRule: string): GameState | null {
@@ -98,6 +99,20 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
     if (destType === 'col' && destArray.length > 0) {
       destArray[destArray.length - 1] = { ...destArray[destArray.length - 1], isRevealed: true };
     }
+    
+    const cardName = bottomCardToMove.wordText || bottomCardToMove.wordImageKey || 'Card';
+    const sourceName = source.type === 'col' ? `Cột ${source.index + 1}` : source.type === 'waste' ? 'Nọc bài' : `Foundation ${source.index + 1}`;
+    const destName = destType === 'col' ? `Cột ${destIndex + 1}` : `Slot ${destIndex + 1}`;
+    
+    newState.lastAction = `Di chuyển [${cardName}] từ ${sourceName} sang ${destName}`;
+    
+    // Check if it's an absorption
+    if (bottomCardToMove.kind === 1 && gameRule === 'new' && destType === 'col') {
+      newState.lastAction = `Dùng [${cardName}] nuốt bài ở ${destName}`;
+    } else if (bottomCardToMove.kind === 0 && destArray.length > 0 && destArray[destArray.length - 1].kind === 1 && gameRule !== 'new') {
+      newState.lastAction = `Đưa [${cardName}] cho Base Card nuốt`;
+    }
+    
     return newState;
   }
   return null;
