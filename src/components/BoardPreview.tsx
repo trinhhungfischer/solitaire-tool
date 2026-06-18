@@ -333,6 +333,9 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
     const actionText = isAutoTrigger ? 'Hệ thống: Hết nước đi -> 🔀 Tự động Super Reshuffle' : 'Người chơi: 🔀 Super Reshuffle';
     setGameState({ ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: actionText });
     setCardsDrawnSinceLastMove(0);
+    if (isAutoTrigger) {
+      setAutoReshuffleCount(c => c + 1);
+    }
   };
 
   // Auto Super Shuffle Detection
@@ -704,12 +707,19 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
             <ClipboardList className="w-5 h-5 text-indigo-400" />
             Nhật Ký Nước Đi
           </h3>
-          <button 
-            onClick={() => setShowLog(false)}
-            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/70 hover:text-white"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            {autoReshuffleCount > 0 && (
+              <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-300 rounded font-mono border border-yellow-500/30" title="Số lần hệ thống tự động Reshuffle">
+                Auto Reshuffles: {autoReshuffleCount}
+              </span>
+            )}
+            <button 
+              onClick={() => setShowLog(false)}
+              className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/70 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
