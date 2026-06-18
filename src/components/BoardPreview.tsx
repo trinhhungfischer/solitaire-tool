@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import type { CardData } from './CardBuilder';
 import { RefreshCw, Image as ImageIcon, Eye, EyeOff, Undo2, Shuffle, Zap, ClipboardList, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { computeDropState } from '../lib/gameLogic';
 import type { PlayableCard, GameState } from '../lib/gameLogic';
 import { getBestAutoMove } from '../lib/autoPlay';
@@ -460,11 +461,22 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
                 className="w-24 h-36 rounded-lg border-2 border-white/20 bg-[#143d22] flex items-center justify-center relative shadow-inner cursor-pointer hover:bg-[#1a4a2a] transition-colors select-none"
                 onClick={handleDrawClick}
               >
-              {gameState.drawPile.length > 0 ? (
-                <div className="absolute inset-0 bg-blue-800 rounded-md border-2 border-white/80 shadow-lg flex items-center justify-center bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-700 to-blue-900">
-                  <div className="text-white/50 font-bold text-xl">{gameState.drawPile.length}</div>
-                </div>
-              ) : (
+              <AnimatePresence>
+                {gameState.drawPile.map((card, idx) => (
+                  <motion.div
+                    key={card.id}
+                    layoutId={card.id}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                    className="absolute inset-0 bg-blue-800 rounded-md border-2 border-white/80 shadow-lg flex items-center justify-center bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-700 to-blue-900"
+                  >
+                    {idx === gameState.drawPile.length - 1 && <div className="text-white/50 font-bold text-xl">{gameState.drawPile.length}</div>}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              {gameState.drawPile.length === 0 && (
                 <div className="w-full h-full rounded-md flex items-center justify-center text-white/20 text-3xl font-bold">
                   ↺
                 </div>
@@ -479,23 +491,35 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
               {gameState.wastePile.length === 0 && (
                 <div className="w-24 h-36 rounded-lg border-2 border-white/10 bg-[#143d22]/50 absolute top-0 left-0" />
               )}
-              {gameState.wastePile.slice(-3).map((card, idx, arr) => {
-                const isTop = idx === arr.length - 1;
-                return (
-                  <div 
-                    key={idx}
-                    className={`w-24 h-36 rounded-lg shadow-[0_4px_10px_rgba(0,0,0,0.3)] absolute top-0 
-                      ${isTop ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1 transition-transform' : ''}
-                      ${card.kind === 1 ? 'bg-amber-50 border-amber-300 border-2' : 'bg-white border-slate-200 border'}
-                    `}
-                    style={{ left: `${idx * 20}px`, zIndex: idx }}
-                    draggable={isTop}
-                    onDragStart={isTop ? (e) => handleDragStart(e, { type: 'waste', startIndex: gameState.wastePile.length - 1 }) : undefined}
-                  >
-                    {renderCard(card, !isTop, 'horizontal')}
-                  </div>
-                );
-              })}
+              <AnimatePresence>
+                {gameState.wastePile.map((card, idx, arr) => {
+                  const displayIdx = arr.length - 1 - idx;
+                  if (displayIdx > 2) return null; // Only show top 3
+                  
+                  const isTop = idx === arr.length - 1;
+                  // Reverse the index for visual positioning (0 is top)
+                  const visualIdx = 2 - displayIdx;
+                  
+                  return (
+                    <motion.div 
+                      key={card.id}
+                      layoutId={card.id}
+                      initial={{ opacity: 0, x: -50 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                      className={`w-24 h-36 rounded-lg shadow-[0_4px_10px_rgba(0,0,0,0.3)] absolute top-0 
+                        ${isTop ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1' : ''}
+                        ${card.kind === 1 ? 'bg-amber-50 border-amber-300 border-2' : 'bg-white border-slate-200 border'}
+                      `}
+                      style={{ left: `${(arr.length <= 3 ? idx : visualIdx) * 20}px`, zIndex: idx }}
+                      draggable={isTop}
+                      onDragStart={isTop ? (e: any) => handleDragStart(e, { type: 'waste', startIndex: gameState.wastePile.length - 1 }) : undefined}
+                    >
+                      {renderCard(card, !isTop, 'horizontal')}
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
             </div>
             </div>
           </div>
@@ -514,15 +538,29 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
                   {foundCards.length === 0 ? (
                     <span className="text-white/20 text-3xl font-black">A</span>
                   ) : (
-                    <div 
-                      className={`w-24 h-36 rounded-lg shadow-[0_4px_10px_rgba(0,0,0,0.3)] absolute top-0 left-0 cursor-grab active:cursor-grabbing hover:-translate-y-1 transition-transform
-                        ${foundCards[foundCards.length - 1].kind === 1 ? 'bg-amber-50 border-amber-300 border-2' : 'bg-white border-slate-200 border'}
-                      `}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, { type: 'foundation', index: i, startIndex: foundCards.length - 1 })}
-                    >
-                      {renderCard(foundCards[foundCards.length - 1], false, 'none')}
-                    </div>
+                    <AnimatePresence>
+                      {foundCards.map((card, cardIndex) => {
+                        const isTop = cardIndex === foundCards.length - 1;
+                        return (
+                          <motion.div 
+                            key={card.id}
+                            layoutId={card.id}
+                            initial={{ scale: 1.2, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                            className={`w-24 h-36 rounded-lg shadow-[0_4px_10px_rgba(0,0,0,0.3)] absolute top-0 left-0 
+                              ${isTop ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1' : ''}
+                              ${card.kind === 1 ? 'bg-amber-50 border-amber-300 border-2' : 'bg-white border-slate-200 border'}
+                            `}
+                            style={{ zIndex: cardIndex }}
+                            draggable={isTop}
+                            onDragStart={isTop ? (e: any) => handleDragStart(e, { type: 'foundation', index: i, startIndex: foundCards.length - 1 }) : undefined}
+                          >
+                            {renderCard(card, false, 'none')}
+                          </motion.div>
+                        );
+                      })}
+                    </AnimatePresence>
                   )}
                 </div>
               ))}
@@ -546,6 +584,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
               <div className="w-24 h-36 rounded-lg border-2 border-white/10 bg-[#143d22]/30 absolute top-0 left-0" />
               
               {/* Cards in Column */}
+              <AnimatePresence>
               {colCards.map((card, cardIndex) => {
                 const isTopCard = cardIndex === colCards.length - 1;
                 // isRevealed tells us if it's face up permanently. showHiddenCards forces it.
@@ -567,15 +606,20 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
                 }
 
                 return (
-                  <div 
-                    key={cardIndex}
+                  <motion.div 
+                    key={card.id}
+                    layoutId={card.id}
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
                     className={`w-24 h-36 rounded-lg shadow-[0_4px_10px_rgba(0,0,0,0.3)] absolute top-0 left-0 flex flex-col 
-                      ${isDraggable ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1 transition-transform' : ''}
+                      ${isDraggable ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1' : ''}
                       ${isFaceUp ? (card.kind === 1 ? 'bg-amber-50 border-amber-300 border-2' : 'bg-white border-slate-200 border') : 'bg-blue-800 border-2 border-white/20'}
                     `}
                     style={{ top: `${cardIndex * 32}px`, zIndex: cardIndex }}
                     draggable={isDraggable}
-                    onDragStart={(e) => {
+                    onDragStart={(e: any) => {
                       if (isDraggable) {
                         handleDragStart(e, { type: 'col', index: colIndex, startIndex: cardIndex });
                       } else {
@@ -584,14 +628,14 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
                     }}
                   >
                     {isFaceUp ? renderCard(card, !isTopCard, 'vertical') : (
-                      // Face down card back
-                      <div className="w-full h-full rounded-md flex items-center justify-center bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-700 to-blue-900">
-                        <div className="w-12 h-12 rounded-full border-4 border-white/10 opacity-30"></div>
+                      <div className="absolute inset-0 rounded-md border border-white/20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-700 to-blue-900 m-1 flex items-center justify-center">
+                        <div className="w-12 h-16 border border-white/10 rounded opacity-20 bg-repeat bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMSI+PC9yZWN0Pgo8cGF0aCBkPSJNMCAwTDggOFpNOCAwTDAgOFoiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLW9wYWNpdHk9IjAuMSI+PC9wYXRoPgo8L3N2Zz4=')]"></div>
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 );
               })}
+              </AnimatePresence>
             </div>
           ))}
           </div>

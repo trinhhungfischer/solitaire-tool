@@ -3,6 +3,7 @@ import type { CardData } from '../components/CardBuilder';
 export interface PlayableCard extends CardData {
   absorbedCount?: number;
   isRevealed?: boolean;
+  id?: string;
 }
 
 export interface GameState {
