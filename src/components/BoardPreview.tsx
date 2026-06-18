@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import type { CardData } from './CardBuilder';
 import { RefreshCw, Image as ImageIcon, Eye, EyeOff, Undo2, Shuffle, Zap, ClipboardList, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { computeDropState } from '../lib/gameLogic';
+import { computeDropState, checkHasAvailableMoves } from '../lib/gameLogic';
 import type { PlayableCard, GameState } from '../lib/gameLogic';
 import { getBestAutoMove } from '../lib/autoPlay';
 import { solveGame } from '../lib/solver';
@@ -265,7 +265,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
     }, 50);
   };
 
-  const handleReshuffle = () => {
+  const handleReshuffle = (isAutoTrigger = false) => {
     const hasUnrevealed = gameState?.cols.some(c => c.some(card => !card.isRevealed));
     if (!gameState || isAutoPlaying || isQuickSolving || (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && !hasUnrevealed)) return;
     
@@ -299,9 +299,26 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
 
     const newDrawPile = pool.map(c => ({ ...c, isRevealed: true }));
 
-    setGameState({ ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: 'Người chơi: 🔀 Super Reshuffle' });
+    const actionText = isAutoTrigger ? 'Hệ thống: Hết nước đi -> 🔀 Tự động Super Reshuffle' : 'Người chơi: 🔀 Super Reshuffle';
+    setGameState({ ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: actionText });
     setCardsDrawnSinceLastMove(0);
   };
+
+  // Auto Super Shuffle Detection
+  useEffect(() => {
+    if (!gameState || isAutoPlaying || isQuickSolving) return;
+
+    const hasUnrevealed = gameState.cols.some(c => c.some(card => !card.isRevealed));
+    if (!hasUnrevealed && gameState.drawPile.length === 0 && gameState.wastePile.length === 0) return;
+
+    const hasMoves = checkHasAvailableMoves(gameState, gameRule);
+    if (!hasMoves) {
+      const timer = setTimeout(() => {
+        handleReshuffle(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [gameState, isAutoPlaying, isQuickSolving, gameRule]);
 
   if (!gameState) return null;
 
@@ -417,7 +434,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
           </button>
           
           <button 
-            onClick={handleReshuffle}
+            onClick={() => handleReshuffle(false)}
             disabled={isAutoPlaying || isQuickSolving || !gameState || (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && !gameState.cols.some(c => c.some(card => !card.isRevealed)))}
             className="p-2.5 rounded-lg transition-colors flex items-center justify-center text-white/70 hover:bg-white/10 hover:text-yellow-400 disabled:opacity-30"
             title="Super Reshuffle Deck"

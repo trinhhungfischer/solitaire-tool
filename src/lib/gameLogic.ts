@@ -118,3 +118,66 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
   }
   return null;
 }
+
+export function checkHasAvailableMoves(state: GameState, gameRule: string): boolean {
+  // Test waste pile
+  if (state.wastePile.length > 0) {
+    const src = { type: 'waste' as const, startIndex: state.wastePile.length - 1 };
+    for (let i = 0; i < state.foundations.length; i++) {
+      if (computeDropState(state, src, 'foundation', i, gameRule)) return true;
+    }
+    for (let i = 0; i < state.cols.length; i++) {
+      if (computeDropState(state, src, 'col', i, gameRule)) return true;
+    }
+  }
+
+  // Test cols
+  for (let colIndex = 0; colIndex < state.cols.length; colIndex++) {
+    const col = state.cols[colIndex];
+    if (col.length === 0) continue;
+    
+    for (let j = col.length - 1; j >= 0; j--) {
+      const card = col[j];
+      if (!card.isRevealed) break;
+      
+      let isValidStack = true;
+      if (j < col.length - 1) {
+        if (card.kind !== 0) isValidStack = false;
+        else {
+          for (let k = j; k < col.length; k++) {
+            const c = col[k];
+            if (c.kind !== 0 || c.category.id !== card.category.id || !c.isRevealed) {
+              isValidStack = false;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (isValidStack) {
+        const src = { type: 'col' as const, index: colIndex, startIndex: j };
+        for (let i = 0; i < state.foundations.length; i++) {
+          if (computeDropState(state, src, 'foundation', i, gameRule)) return true;
+        }
+        for (let i = 0; i < state.cols.length; i++) {
+          if (i === colIndex) continue;
+          if (computeDropState(state, src, 'col', i, gameRule)) return true;
+        }
+      }
+    }
+  }
+
+  // Test draw pile
+  for (let i = 0; i < state.drawPile.length; i++) {
+    const tempState = { ...state, wastePile: [state.drawPile[i]] };
+    const src = { type: 'waste' as const, startIndex: 0 };
+    for (let f = 0; f < state.foundations.length; f++) {
+      if (computeDropState(tempState, src, 'foundation', f, gameRule)) return true;
+    }
+    for (let c = 0; c < state.cols.length; c++) {
+      if (computeDropState(tempState, src, 'col', c, gameRule)) return true;
+    }
+  }
+
+  return false;
+}
