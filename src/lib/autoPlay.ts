@@ -6,7 +6,7 @@ interface ScoredMove {
   newState: GameState;
 }
 
-export function getBestAutoMove(prevState: GameState, gameRule: string): GameState | null {
+function evaluateMoves(prevState: GameState, gameRule: string, depth: number, maxDepth: number): ScoredMove[] {
   const scoredMoves: ScoredMove[] = [];
 
   // 1. Gather all valid sources
@@ -41,13 +41,24 @@ export function getBestAutoMove(prevState: GameState, gameRule: string): GameSta
     }
   });
 
-  // 2. Evaluate all possible moves and assign scores
+  // 2. Evaluate all possible moves
   for (const src of sources) {
     // Try dropping on foundations
     for (let i = 0; i < prevState.foundations.length; i++) {
       const result = computeDropState(prevState, src, 'foundation', i, gameRule);
       if (result) {
-        scoredMoves.push({ score: 500, newState: result });
+        let immediateScore = 500;
+        let totalScore = immediateScore;
+
+        // Calculate lookahead
+        if (depth < maxDepth) {
+           const nextMoves = evaluateMoves(result, gameRule, depth + 1, maxDepth);
+           if (nextMoves.length > 0) {
+              totalScore += nextMoves[0].score * 0.9; // 10% discount factor for future moves
+           }
+        }
+
+        scoredMoves.push({ score: totalScore, newState: result });
       }
     }
 
@@ -59,14 +70,14 @@ export function getBestAutoMove(prevState: GameState, gameRule: string): GameSta
       
       const result = computeDropState(prevState, src, 'col', i, gameRule);
       if (result) {
-        let score = 0;
+        let immediateScore = 0;
         
         const prevTotal = prevState.cols.reduce((sum, c) => sum + c.length, 0);
         const newTotal = result.cols.reduce((sum, c) => sum + c.length, 0);
         const isAbsorbing = newTotal < prevTotal;
 
         if (isAbsorbing) {
-          score += 500; // Absorbing Math into Base is a top priority
+          immediateScore += 500;
         }
 
         if (src.type === 'col') {
@@ -74,8 +85,12 @@ export function getBestAutoMove(prevState: GameState, gameRule: string): GameSta
           const revealsHidden = src.startIndex > 0 && !sourceCol[src.startIndex - 1].isRevealed;
           const emptiesColumn = src.startIndex === 0;
 
-          if (revealsHidden) score += 300;
-          if (emptiesColumn) score += 200;
+          if (revealsHidden) {
+            // Prefer revealing columns that have MORE hidden cards underneath
+            const hiddenCount = src.startIndex;
+            immediateScore += 300 + (hiddenCount * 10);
+          }
+          if (emptiesColumn) immediateScore += 200;
 
           // Block pointless stack splitting to avoid infinite loops
           if (!isAbsorbing && !revealsHidden && !emptiesColumn) continue;
@@ -85,22 +100,38 @@ export function getBestAutoMove(prevState: GameState, gameRule: string): GameSta
 
           // Small reward for consolidating
           if (!isAbsorbing && !revealsHidden && emptiesColumn) {
-            score += 10;
+            immediateScore += 10;
           }
         } else if (src.type === 'waste') {
-          score += 100; // Playing from waste to column is good
+          immediateScore += 50; // Waste moves have lower immediate priority unless they lead to a combo
         }
 
-        if (score > 0) {
-          scoredMoves.push({ score, newState: result });
+        if (immediateScore > 0) {
+           let totalScore = immediateScore;
+
+           // Lookahead
+           if (depth < maxDepth) {
+              const nextMoves = evaluateMoves(result, gameRule, depth + 1, maxDepth);
+              if (nextMoves.length > 0) {
+                 totalScore += nextMoves[0].score * 0.9;
+              }
+           }
+
+           scoredMoves.push({ score: totalScore, newState: result });
         }
       }
     }
   }
 
-  // 3. Return the highest scoring move
-  if (scoredMoves.length === 0) return null;
-
   scoredMoves.sort((a, b) => b.score - a.score);
-  return scoredMoves[0].newState;
+  return scoredMoves;
+}
+
+export function getBestAutoMove(prevState: GameState, gameRule: string): GameState | null {
+  // Use a Lookahead depth of 2 (current move + 2 future moves)
+  // This allows the bot to see combos that are up to 3 steps long!
+  const bestMoves = evaluateMoves(prevState, gameRule, 0, 2);
+  
+  if (bestMoves.length === 0) return null;
+  return bestMoves[0].newState;
 }

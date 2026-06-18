@@ -1,6 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import type { CardData } from './CardBuilder';
 import { RefreshCw, Image as ImageIcon, Eye, EyeOff, Undo2 } from 'lucide-react';
+import { computeDropState } from '../lib/gameLogic';
+import type { PlayableCard, GameState } from '../lib/gameLogic';
+import { getBestAutoMove } from '../lib/autoPlay';
 
 interface BoardPreviewProps {
   foundationCount: number;
@@ -13,51 +16,20 @@ interface BoardPreviewProps {
   gameRule?: 'classic' | 'new';
 }
 
-// Simple seeded random number generator
-function lcg(seed: number) {
-  let m = 0x80000000;
-  let a = 1103515245;
-  let c = 12345;
-  let state = seed ? seed : Math.floor(Math.random() * (m - 1));
-
-  return function() {
-    state = (a * state + c) % m;
-    return state / (m - 1);
-  };
-}
-
-import { computeDropState } from '../lib/gameLogic';
-import type { PlayableCard, GameState } from '../lib/gameLogic';
-import { getBestAutoMove } from '../lib/autoPlay';
-
 export default function BoardPreview({ foundationCount, columnCards, data, shuffleSeed, maxMoves, isAutoPlaying, onStopAutoPlay, gameRule = 'new' }: BoardPreviewProps) {
-  const [internalSeed, setInternalSeed] = useState<number | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [history, setHistory] = useState<GameState[]>([]);
   const [showHiddenCards, setShowHiddenCards] = useState<boolean>(false);
-  const [cardsDrawnSinceLastMove, setCardsDrawnSinceLastMove] = useState<number>(0);
-
-  // When props.shuffleSeed changes, reset internalSeed so we use the prop
-  useEffect(() => {
-    setInternalSeed(null);
-  }, [shuffleSeed]);
-
-  const activeSeed = internalSeed !== null ? internalSeed : (shuffleSeed || 12345);
+  const [resetCount, setResetCount] = useState<number>(0);
+  const [cardsDrawnSinceLastMove, setCardsDrawnSinceLastMove] = useState(0);
 
   const shuffledData = useMemo(() => {
-    // Convert to PlayableCard and init absorbedCount to 0 for Base cards
     const arr: PlayableCard[] = data.map(c => ({
       ...c,
       absorbedCount: c.kind === 1 ? 0 : undefined
     }));
-    const rng = lcg(activeSeed);
-    
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
     return arr;
-  }, [data, activeSeed]);
+  }, [data]);
 
   useEffect(() => {
     if (!isAutoPlaying || !gameState) return;
@@ -98,7 +70,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
     }, 500);
     
     return () => clearInterval(interval);
-  }, [isAutoPlaying, gameState, cardsDrawnSinceLastMove, onStopAutoPlay]);
+  }, [isAutoPlaying, gameState, cardsDrawnSinceLastMove, onStopAutoPlay, gameRule]);
 
   useEffect(() => {
     const cols: PlayableCard[][] = [];
@@ -110,7 +82,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
         if (cardIndex < shuffledData.length) {
           col.push({
             ...shuffledData[cardIndex],
-            isRevealed: i === count - 1 // Only the last card is revealed initially
+            isRevealed: i === count - 1 
           });
           cardIndex++;
         }
@@ -118,17 +90,16 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
       cols.push(col);
     }
     
-    // Draw pile and waste pile cards are effectively revealed when drawn
     const drawPile = shuffledData.slice(cardIndex).map(c => ({ ...c, isRevealed: true }));
     const wastePile: PlayableCard[] = [];
     const foundations: PlayableCard[][] = Array.from({ length: foundationCount }, () => []);
 
     setGameState({ drawPile, wastePile, cols, foundations, moves: 0 });
     setHistory([]);
-  }, [shuffledData, columnCards, foundationCount]);
+  }, [shuffledData, columnCards, foundationCount, resetCount]);
 
-  const handleReshuffle = () => {
-    setInternalSeed(Math.floor(Math.random() * 1000000));
+  const handleRestart = () => {
+    setResetCount(prev => prev + 1);
   };
 
   const handleDrawClick = () => {
@@ -142,7 +113,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
         return { ...prev, drawPile: newDraw, wastePile: [...prev.wastePile, card], moves: prev.moves + 1 };
       } else {
         if (prev.wastePile.length === 0) {
-          setHistory(h => h.slice(0, -1)); // Revert history push if nothing happened
+          setHistory(h => h.slice(0, -1));
           return prev;
         }
         return { ...prev, drawPile: [...prev.wastePile].reverse(), wastePile: [], moves: prev.moves + 1 };
@@ -199,8 +170,6 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
   if (!gameState) return null;
 
   const renderCard = (card: PlayableCard, isCovered: boolean = false, stackDirection: 'vertical' | 'horizontal' | 'none' = 'none') => {
-    
-    // Helper to render the math formula
     const renderFormula = (sizeClass: string) => {
       if (card.wordVisualType === 1) {
         return (
@@ -221,13 +190,11 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
 
     return (
       <div className="w-full h-full flex flex-col pointer-events-none relative px-1.5 py-1">
-        {/* Top Header Row */}
         <div className="flex justify-between items-start w-full">
           <div className="flex items-center gap-1">
             <div className="text-[9px] font-bold text-slate-400">
               {card.kind === 1 ? 'BASE' : 'MATH'}
             </div>
-            {/* If COVERED and VERTICAL, show formula or base text here next to MATH */}
             {isCovered && stackDirection === 'vertical' && (
               <div className="ml-1 opacity-80">
                 {card.kind === 1 ? (
@@ -240,16 +207,12 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
               </div>
             )}
           </div>
-          
-          {/* Render Tracker for Base Cards */}
           {card.kind === 1 && (
             <div className="bg-amber-200 text-amber-900 text-[9px] font-bold px-1 rounded-sm shadow-sm border border-amber-300">
               {card.absorbedCount || 0}/{card.category.elementCount}
             </div>
           )}
         </div>
-
-        {/* If COVERED and HORIZONTAL, show formula on the left edge (rotated) */}
         {isCovered && stackDirection === 'horizontal' && (
           <div className="absolute left-1 top-6 bottom-4 w-4 flex flex-col justify-center items-center overflow-hidden">
              <div className="origin-center -rotate-90 whitespace-nowrap opacity-80">
@@ -261,8 +224,6 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
              </div>
           </div>
         )}
-
-        {/* Center Content */}
         {!isCovered && (
           <div className="w-full text-center flex-1 flex items-center justify-center pb-2">
             {card.kind === 1 ? (
@@ -280,8 +241,6 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
 
   return (
     <div className="relative w-full h-full bg-[#1A4E2B] overflow-hidden flex flex-col p-6 font-sans">
-      
-      {/* Left Sidebar Actions (Eye & Undo & Reshuffle) */}
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-3">
         <div className="bg-[#143d22]/80 backdrop-blur-sm p-1.5 rounded-xl border border-white/10 flex flex-col gap-1 shadow-lg">
           <button 
@@ -291,7 +250,6 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
           >
             {showHiddenCards ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
           </button>
-          
           <button 
             onClick={handleUndo}
             disabled={history.length === 0}
@@ -300,21 +258,17 @@ export default function BoardPreview({ foundationCount, columnCards, data, shuff
           >
             <Undo2 className="w-5 h-5" />
           </button>
-
           <div className="w-8 h-px bg-white/10 mx-auto my-1"></div>
-
           <button 
-            onClick={handleReshuffle}
+            onClick={handleRestart}
             className="p-2.5 rounded-lg transition-colors flex items-center justify-center text-white/70 hover:bg-white/10 hover:text-white"
-            title="Reshuffle Preview"
+            title="Restart Level"
           >
             <RefreshCw className="w-5 h-5" />
           </button>
         </div>
       </div>
-
-      {/* Top Center: Moves Counter */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-center">
         <div className="bg-black/20 backdrop-blur-md px-6 py-2 rounded-full border border-white/10 text-white shadow-lg text-sm tracking-wide">
           {maxMoves && maxMoves > 0 ? (
             <span className={gameState.moves > maxMoves ? 'text-red-400 font-bold' : 'font-medium'}>

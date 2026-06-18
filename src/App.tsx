@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Download, Plus, Trash2, LayoutGrid, HelpCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Download, Plus, Trash2, LayoutGrid, Upload } from 'lucide-react';
 
 import CardBuilder from './components/CardBuilder';
 import type { CardData } from './components/CardBuilder';
@@ -26,6 +26,37 @@ function App() {
 
   // Resizable sidebar state
   const [sidebarWidth, setSidebarWidth] = useState(500);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsedData = JSON.parse(content) as LevelConfig;
+        
+        // Basic validation
+        if (parsedData && typeof parsedData.levelId === 'number' && Array.isArray(parsedData.data)) {
+          setLevelData(parsedData);
+          setSelectedLevelId(parsedData.levelId);
+        } else {
+          setError('Invalid JSON format. Missing required fields.');
+        }
+      } catch (err: any) {
+        setError(`Failed to parse JSON: ${err.message}`);
+      }
+    };
+    reader.readAsText(file);
+    
+    // Reset input so the same file can be imported again if needed
+    if (event.target) {
+      event.target.value = '';
+    }
+  };
   const [isDragging, setIsDragging] = useState(false);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -141,6 +172,21 @@ function App() {
             Rule: {gameRule === 'new' ? 'Default (New)' : 'Classic'}
           </button>
           
+          <input 
+            type="file" 
+            accept=".json" 
+            className="hidden" 
+            ref={fileInputRef} 
+            onChange={handleImport} 
+          />
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          >
+            <Upload className="w-4 h-4" />
+            Import JSON
+          </button>
+          
           <button 
             onClick={handleDownload}
             disabled={!levelData}
@@ -190,11 +236,11 @@ function App() {
           </div>
 
           {!isLoading && !error && levelData && (
-            <div className="p-5 space-y-6">
+            <div className="p-4 space-y-4">
               
               {/* Global Settings */}
-              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                <div className="flex justify-between items-center mb-4 border-b pb-2">
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex justify-between items-center mb-3 border-b pb-2">
                   <h3 className="text-lg font-semibold">Global Settings</h3>
                   <button 
                     onClick={() => setIsAutoPlaying(!isAutoPlaying)}
@@ -203,7 +249,7 @@ function App() {
                     {isAutoPlaying ? 'Stop Auto Play' : 'Start Auto Play'}
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Level ID</label>
                     <input 
@@ -234,47 +280,13 @@ function App() {
                       <option value={5}>5 Slots</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1">
-                      Shuffle Seed
-                      <div className="relative group cursor-help">
-                        <HelpCircle className="w-4 h-4 text-slate-400 hover:text-solitaire-green transition-colors" />
-                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 p-3 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
-                          <p className="font-bold mb-1 border-b border-slate-600 pb-1">Cơ chế Shuffle LCG</p>
-                          <p>Sử dụng thuật toán Linear Congruential Generator (LCG) để trộn bài ngẫu nhiên nhưng có thể tái tạo (determinism).</p>
-                          <ul className="list-disc pl-4 mt-1 space-y-0.5 text-slate-300">
-                            <li>Cùng một Seed sẽ luôn cho ra đúng một thứ tự bài giống nhau.</li>
-                            <li>Nếu để trống Seed, game sẽ tự động sinh ra một Seed ngẫu nhiên mỗi lần chạy.</li>
-                            <li>Thuật toán xáo trộn theo kiểu Fisher-Yates shuffle kết hợp với chuỗi random từ LCG.</li>
-                          </ul>
-                          {/* Triangle pointer */}
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-slate-800"></div>
-                        </div>
-                      </div>
-                    </label>
-                    <input 
-                      type="number" 
-                      value={levelData.shuffleSeed || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '') {
-                          const newData = { ...levelData };
-                          delete newData.shuffleSeed;
-                          setLevelData(newData);
-                        } else {
-                          setLevelData({...levelData, shuffleSeed: parseInt(val)});
-                        }
-                      }}
-                      placeholder="Random if empty"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-solitaire-green focus:border-transparent text-sm"
-                    />
-                  </div>
+
                 </div>
               </div>
 
               {/* Board Layout Builder */}
-              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                <div className="flex justify-between items-center mb-4 border-b pb-2">
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex justify-between items-center mb-3 border-b pb-2">
                   <h3 className="text-lg font-semibold">Board Layout</h3>
                   <button 
                     onClick={() => {
@@ -336,7 +348,7 @@ function App() {
 
               {/* Card Builder */}
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-5">
+                <div className="p-4">
                   <CardBuilder 
                     levelId={levelData.levelId} 
                     data={levelData.data} 

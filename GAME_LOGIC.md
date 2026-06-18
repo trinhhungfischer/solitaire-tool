@@ -35,34 +35,15 @@ Game hiện tại hỗ trợ 2 bộ luật chơi: **Classic** và **Default (New
 4. **Base kéo vào Ô trống:** Thẻ Base có thể kéo vào một cột Tableau trống hoặc ô Foundation trống.
 ---
 
-## 3. Cơ chế Shuffle (Xáo bài Tất định)
+## 3. Cơ chế Chia bài (Thứ tự cố định)
 
-Để đảm bảo Game Client và Level Editor luôn sinh ra cùng một ván bài y hệt nhau khi dùng chung một số `Shuffle Seed`, hệ thống sử dụng thuật toán **LCG (Linear Congruential Generator)** kết hợp với **Fisher-Yates Shuffle**.
+Theo yêu cầu mới nhất, game đã **bỏ hoàn toàn cơ chế xáo trộn bài ngẫu nhiên (Shuffle)**. 
+Bài sẽ được chia chính xác theo đúng thứ tự (index) được lưu trong mảng `data` của Level Editor. 
+Hãy tưởng tượng mảng `data` là một bộ bài đã được xếp chồng sẵn:
+- Lá bài ở vị trí đầu tiên (`data[0]`) sẽ được chia vào ô đầu tiên của cột đầu tiên trong Tableau.
+- Lần lượt chia dần xuống các ô trống tiếp theo trong Tableau, và sau đó là Draw Pile.
 
-**Thông số LCG chuẩn được sử dụng:**
-- Multiplier (`a`): `1103515245`
-- Increment (`c`): `12345`
-- Modulus (`m`): `2147483648` ($2^{31}$)
-
-**Thuật toán mô phỏng (Mã giả / C# / JS):**
-```javascript
-// 1. Cài đặt RNG
-let state = SEED; // Nếu không có SEED, random một số.
-function nextFloat() {
-    state = (1103515245 * state + 12345) % 2147483648;
-    return state / 2147483647; // Trả về số từ 0.0 -> 1.0
-}
-
-// 2. Trộn mảng Fisher-Yates
-for (let i = cards.length - 1; i > 0; i--) {
-    let j = Math.floor(nextFloat() * (i + 1));
-    // Hoán đổi vị trí i và j
-    let temp = cards[i];
-    cards[i] = cards[j];
-    cards[j] = temp;
-}
-```
-*Việc tuân thủ chính xác bộ thông số này dưới Client là bắt buộc để tính năng "Level Design" trên web tool có ý nghĩa.*
+Điều này cho phép người thiết kế Level (Level Designer) có thể kiểm soát chính xác 100% vị trí của từng lá bài trên bàn chơi để tạo ra các thế bài giải đố (Puzzle) cố định thay vì ngẫu nhiên.
 
 ---
 
