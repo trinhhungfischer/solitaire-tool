@@ -1,0 +1,380 @@
+{
+  "levelId": 63,
+  "foundationCount": 3,
+  "columnCards": [
+    3,
+    4,
+    5
+  ],
+  "maxMoves": 72,
+  "data": [
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6308,
+        "elementCount": 7,
+        "displayName": 50,
+        "hasImage": 0
+      },
+      "wordText": "10X5"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6300,
+        "elementCount": 7,
+        "displayName": 152,
+        "hasImage": 0
+      },
+      "wordText": "19X8"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6308,
+        "elementCount": 7,
+        "displayName": 50,
+        "hasImage": 0
+      },
+      "wordText": "30+20"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6300,
+        "elementCount": 7,
+        "displayName": 152,
+        "hasImage": 0
+      },
+      "wordText": "76+76"
+    },
+    {
+      "kind": 1,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6316,
+        "elementCount": 4,
+        "displayName": 48,
+        "hasImage": 0
+      }
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6300,
+        "elementCount": 7,
+        "displayName": 152,
+        "hasImage": 0
+      },
+      "wordText": "161-9"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6330,
+        "elementCount": 3,
+        "displayName": 38,
+        "hasImage": 0
+      },
+      "wordText": "19X2"
+    },
+    {
+      "kind": 1,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6326,
+        "elementCount": 3,
+        "displayName": 36,
+        "hasImage": 0
+      }
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6321,
+        "elementCount": 4,
+        "displayName": 62,
+        "hasImage": 0
+      },
+      "wordText": "124/2"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6321,
+        "elementCount": 4,
+        "displayName": 62,
+        "hasImage": 0
+      },
+      "wordText": "70-8"
+    },
+    {
+      "kind": 1,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6300,
+        "elementCount": 7,
+        "displayName": 152,
+        "hasImage": 0
+      }
+    },
+    {
+      "kind": 1,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6330,
+        "elementCount": 3,
+        "displayName": 38,
+        "hasImage": 0
+      }
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6330,
+        "elementCount": 3,
+        "displayName": 38,
+        "hasImage": 0
+      },
+      "wordText": "40-2"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6326,
+        "elementCount": 3,
+        "displayName": 36,
+        "hasImage": 0
+      },
+      "wordText": "6X6"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6308,
+        "elementCount": 7,
+        "displayName": 50,
+        "hasImage": 0
+      },
+      "wordText": "100/2"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6300,
+        "elementCount": 7,
+        "displayName": 152,
+        "hasImage": 0
+      },
+      "wordText": "80+72"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6321,
+        "elementCount": 4,
+        "displayName": 62,
+        "hasImage": 0
+      },
+      "wordText": "31X2"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6330,
+        "elementCount": 3,
+        "displayName": 38,
+        "hasImage": 0
+      },
+      "wordText": "19+19"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6300,
+        "elementCount": 7,
+        "displayName": 152,
+        "hasImage": 0
+      },
+      "wordText": "2X76"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6316,
+        "elementCount": 4,
+        "displayName": 48,
+        "hasImage": 0
+      },
+      "wordText": "6X8"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6316,
+        "elementCount": 4,
+        "displayName": 48,
+        "hasImage": 0
+      },
+      "wordText": "96/2"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6326,
+        "elementCount": 3,
+        "displayName": 36,
+        "hasImage": 0
+      },
+      "wordText": "40-4"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6316,
+        "elementCount": 4,
+        "displayName": 48,
+        "hasImage": 0
+      },
+      "wordText": "24+24"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6321,
+        "elementCount": 4,
+        "displayName": 62,
+        "hasImage": 0
+      },
+      "wordText": "31+31"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6300,
+        "elementCount": 7,
+        "displayName": 152,
+        "hasImage": 0
+      },
+      "wordText": "304/2"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6300,
+        "elementCount": 7,
+        "displayName": 152,
+        "hasImage": 0
+      },
+      "wordText": "160-8"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6326,
+        "elementCount": 3,
+        "displayName": 36,
+        "hasImage": 0
+      },
+      "wordText": "18+18"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6316,
+        "elementCount": 4,
+        "displayName": 48,
+        "hasImage": 0
+      },
+      "wordText": "50-2"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6308,
+        "elementCount": 7,
+        "displayName": 50,
+        "hasImage": 0
+      },
+      "wordText": "25+25"
+    },
+    {
+      "kind": 1,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6321,
+        "elementCount": 4,
+        "displayName": 62,
+        "hasImage": 0
+      }
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6308,
+        "elementCount": 7,
+        "displayName": 50,
+        "hasImage": 0
+      },
+      "wordText": "55-5"
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6308,
+        "elementCount": 7,
+        "displayName": 50,
+        "hasImage": 0
+      },
+      "wordText": "60-10"
+    },
+    {
+      "kind": 1,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6308,
+        "elementCount": 7,
+        "displayName": 50,
+        "hasImage": 0
+      }
+    },
+    {
+      "kind": 0,
+      "wordVisualType": 0,
+      "category": {
+        "id": 6308,
+        "elementCount": 7,
+        "displayName": 50,
+        "hasImage": 0
+      },
+      "wordText": "5X10"
+    }
+  ]
+}
