@@ -69,18 +69,9 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
     }
   } else if (bottomCardToMove.kind === 1) {
     if (destArray.length === 0) {
-      if (destType === 'foundation') {
-        if ((bottomCardToMove.absorbedCount || 0) >= bottomCardToMove.category.elementCount) {
-          validMove = true;
-        }
-      } else {
-        validMove = true;
-      }
-      
-      if (validMove) {
-        sourceArray.splice(source.startIndex);
-        destArray.push(...cardsToMove);
-      }
+      validMove = true;
+      sourceArray.splice(source.startIndex);
+      destArray.push(...cardsToMove);
     } else if (gameRule === 'new' && destType === 'col') {
       const destCard = destArray[destArray.length - 1];
       if (destCard.kind === 0 && destCard.category.id === bottomCardToMove.category.id) {
