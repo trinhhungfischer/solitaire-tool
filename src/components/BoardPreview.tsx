@@ -372,31 +372,13 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
         return newCol;
       });
 
-      // Feeder Strategy: identify which Base cards are face-up
-      const neededCategoryIds = new Set<number>();
-      newCols.forEach(col => {
-        col.forEach(c => {
-          if (c.kind === 1) neededCategoryIds.add(c.category.id);
-        });
-      });
-
-      const feederCards: typeof pool = [];
-      const remainingPool: typeof pool = [];
-
       // Shuffle pool first to randomize selections
       for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pool[i], pool[j]] = [pool[j], pool[i]];
       }
 
-      // Pick one feeder Math card for each needed Base card
-      for (const card of pool) {
-        if (card.kind === 0 && neededCategoryIds.has(card.category.id) && feederCards.findIndex(fc => fc.category.id === card.category.id) === -1) {
-          feederCards.push(card);
-        } else {
-          remainingPool.push(card);
-        }
-      }
+      const remainingPool = [...pool];
 
       // Distribute back to unrevealed slots with Anti-Burying logic
       const finalCols = gameState.cols.map((oldCol, colIndex) => {
@@ -420,8 +402,8 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
         return newCol;
       });
 
-      // Place feeder cards at the START of the draw pile so they are drawn immediately
-      const newDrawPile = [...feederCards, ...remainingPool].map(c => ({ ...c, isRevealed: true }));
+      // Place the rest into the draw pile randomly
+      const newDrawPile = remainingPool.map(c => ({ ...c, isRevealed: true }));
 
       const actionText = isAutoTrigger ? 'Hệ thống: Hết nước đi -> 🔀 Tự động Super Reshuffle' : 'Người chơi: 🔀 Super Reshuffle';
       return { ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: actionText };

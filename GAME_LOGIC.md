@@ -41,9 +41,8 @@ Game hiện tại hỗ trợ 2 bộ luật chơi: **Classic** và **Default (New
 7. **Cơ chế Super Reshuffle (Guaranteed Winnable):** Khi rơi vào trạng thái "bị kẹt" (đã định nghĩa ở mục 6), hệ thống sẽ tự động kích hoạt Super Reshuffle. 
    **Giải thích thuật toán cho Dev (2 bước):**
    - **Bước 1: Trộn bài có chủ đích (Smart Shuffle)**
-     - Gom toàn bộ bài đang úp ở Tableau và bài trong Stock/Waste thành một `pool`.
-     - *Bơm bài (Feeder):* Quét các thẻ Base đang ngửa trên bàn. Tìm trong `pool` các thẻ Math tương ứng và nhét chúng vào đầu Draw Pile. Đảm bảo người chơi bốc bài là có nước đi ngay.
-     - *Chống kẹt (Anti-Burying):* Rải ngẫu nhiên số bài còn lại vào các ô úp của Tableau. Lưu ý: Cột nào đang có thẻ Base ngửa thì **KHÔNG** rải thẻ Math cùng loại úp xuống dưới cột đó (tránh việc thẻ chìa khóa bị đè bởi chính ổ khóa).
+     - Gom toàn bộ bài đang úp ở Tableau và bài trong Stock/Waste thành một `pool` và trộn ngẫu nhiên.
+     - *Chống kẹt (Anti-Burying):* Rải bài vào các ô úp của Tableau. Lưu ý: Cột nào đang có thẻ Base ngửa thì **KHÔNG** rải thẻ Math cùng loại úp xuống dưới cột đó (tránh việc thẻ chìa khóa bị đè bởi chính ổ khóa). Các lá bài còn dư sẽ ném vào Draw Pile.
    - **Bước 2: Test ngầm (Auto-Verify)**
      - Thuật toán sinh ra kết quả của Bước 1, nhưng chưa hiển thị ngay.
      - Cho Bot chạy thuật toán `Quick Solve` trên kết quả đó (giới hạn 3000 vòng lặp). Nếu Bot giải thắng -> Áp dụng kết quả lên UI cho người chơi. Nếu Bot bí đường -> Bỏ kết quả đó, quay lại Bước 1 trộn lại (Tối đa 5 lần thử).
