@@ -31,7 +31,7 @@ Game hiện tại hỗ trợ 2 bộ luật chơi: **Classic** và **Default (New
    - Thẻ Math **KHÔNG ĐƯỢC** kéo thả lên thẻ Base.
    - Ngược lại, thẻ Base **ĐƯỢC PHÉP** nhấc lên và thả đè vào một cột có thẻ Math (cùng Category).
    - Khi đó, thẻ Base sẽ "nuốt trọn" (absorb) toàn bộ các thẻ Math đang ngửa của Category đó trên đỉnh cột. 
-   - Nếu nuốt đủ số lượng (`elementCount`), thẻ Base nổ tung. Nếu chưa đủ, thẻ Base sẽ nằm đè lên vị trí đó.
+   - Nếu nuốt đủ số lượng (`elementCount`), thẻ Base cần kéo lên **Foundation** sẽ bị huỷ. Nếu chưa đủ, thẻ Base sẽ nằm đè lên vị trí đó.
 4. **Base kéo vào Ô trống:** Thẻ Base có thể kéo vào một cột Tableau trống hoặc ô Foundation trống.
 5. **Auto Super Reshuffle:** Khi người chơi (hoặc Auto Play) rơi vào trạng thái "bị kẹt", hệ thống sẽ tự động kích hoạt **Super Reshuffle** để trộn lại toàn bộ các lá bài chưa lật ở Tableau và bài dư (Stock/Waste) nhằm gỡ bí. 
    - **Định nghĩa trạng thái "Bị kẹt" (No available moves):** Hệ thống sẽ quét toàn diện và xác nhận kẹt nếu thỏa mãn ĐỒNG THỜI 3 điều kiện:

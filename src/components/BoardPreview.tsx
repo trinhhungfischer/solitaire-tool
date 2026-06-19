@@ -361,36 +361,95 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
     setHistory(h => [...h, gameState]);
     setFutureHistory([]);
     
-    const pool = [...gameState.drawPile, ...gameState.wastePile];
-    const newCols = gameState.cols.map(col => {
-      const newCol = [];
-      for (const card of col) {
-        if (!card.isRevealed) pool.push(card);
-        else newCol.push(card);
-      }
-      return newCol;
-    });
+    const generateShuffle = () => {
+      const pool = [...gameState.drawPile, ...gameState.wastePile];
+      const newCols = gameState.cols.map(col => {
+        const newCol = [];
+        for (const card of col) {
+          if (!card.isRevealed) pool.push(card);
+          else newCol.push(card);
+        }
+        return newCol;
+      });
 
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
+      // Feeder Strategy: identify which Base cards are face-up
+      const neededCategoryIds = new Set<number>();
+      newCols.forEach(col => {
+        col.forEach(c => {
+          if (c.kind === 1) neededCategoryIds.add(c.category.id);
+        });
+      });
+
+      const feederCards: typeof pool = [];
+      const remainingPool: typeof pool = [];
+
+      // Shuffle pool first to randomize selections
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+
+      // Pick one feeder Math card for each needed Base card
+      for (const card of pool) {
+        if (card.kind === 0 && neededCategoryIds.has(card.category.id) && feederCards.findIndex(fc => fc.category.id === card.category.id) === -1) {
+          feederCards.push(card);
+        } else {
+          remainingPool.push(card);
+        }
+      }
+
+      // Distribute back to unrevealed slots with Anti-Burying logic
+      const finalCols = gameState.cols.map((oldCol, colIndex) => {
+        const newCol = [];
+        const faceUpCards = newCols[colIndex];
+        const unrevealedCount = oldCol.length - faceUpCards.length;
+        
+        // Anti-Burying: Don't place a Math card under its own Base card
+        const forbiddenCategories = new Set<number>();
+        faceUpCards.forEach(c => {
+           if (c.kind === 1) forbiddenCategories.add(c.category.id);
+        });
+
+        for (let i = 0; i < unrevealedCount; i++) {
+          let safeIndex = remainingPool.findIndex(c => !(c.kind === 0 && forbiddenCategories.has(c.category.id)));
+          if (safeIndex === -1) safeIndex = 0; // Fallback if no safe card exists
+          const card = remainingPool.splice(safeIndex, 1)[0];
+          newCol.push({ ...card, isRevealed: false });
+        }
+        newCol.push(...faceUpCards);
+        return newCol;
+      });
+
+      // Place feeder cards at the START of the draw pile so they are drawn immediately
+      const newDrawPile = [...feederCards, ...remainingPool].map(c => ({ ...c, isRevealed: true }));
+
+      const actionText = isAutoTrigger ? 'Hệ thống: Hết nước đi -> 🔀 Tự động Super Reshuffle' : 'Người chơi: 🔀 Super Reshuffle';
+      return { ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: actionText };
+    };
+
+    let bestState = generateShuffle();
+
+    // Verification loop (up to 5 tries to find a guaranteed winnable state)
+    // Only verified in 'new' (default) rule mode to avoid heavy processing on classic mode
+    if (gameRule === 'new') {
+      let foundWinnable = false;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const candidateState = attempt === 0 ? bestState : generateShuffle();
+        const path = solveGame(candidateState, gameRule, 3000); // 3000 states limit for speed
+        if (path && path.length > 0) {
+           bestState = candidateState;
+           foundWinnable = true;
+           console.log(`Verified winnable shuffle on attempt ${attempt + 1}`);
+           break;
+        }
+        bestState = candidateState; // keep the latest as fallback
+      }
+      if (!foundWinnable) {
+         console.log("Could not guarantee a winnable shuffle after 5 attempts, using fallback smart shuffle.");
+      }
     }
 
-    const finalCols = gameState.cols.map((oldCol, colIndex) => {
-      const newCol = [];
-      const faceUpCards = newCols[colIndex];
-      const unrevealedCount = oldCol.length - faceUpCards.length;
-      for (let i = 0; i < unrevealedCount; i++) {
-        newCol.push({ ...pool.pop()!, isRevealed: false });
-      }
-      newCol.push(...faceUpCards);
-      return newCol;
-    });
-
-    const newDrawPile = pool.map(c => ({ ...c, isRevealed: true }));
-
-    const actionText = isAutoTrigger ? 'Hệ thống: Hết nước đi -> 🔀 Tự động Super Reshuffle' : 'Người chơi: 🔀 Super Reshuffle';
-    setGameState({ ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: actionText });
+    setGameState(bestState);
     setCardsDrawnSinceLastMove(0);
     if (isAutoTrigger) {
       setAutoReshuffleCount(c => c + 1);
