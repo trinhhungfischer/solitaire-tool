@@ -34,12 +34,15 @@ Game hiện tại hỗ trợ 2 bộ luật chơi: **Classic** và **Default (New
    - Khi nuốt đủ số lượng (`elementCount`), thẻ Base được xem là "Đã đầy" (Full count). Thẻ Base đầy không tự biến mất ngay mà vẫn nằm lại trên Tableau chờ được kéo lên Foundation. Nếu chưa đầy, thẻ Base nằm đè lên vị trí đó và đợi "ăn" thêm.
 4. **Base kéo vào Ô trống:** Thẻ Base có thể kéo vào một cột Tableau trống.
 5. **Kéo lên Foundation:** CHỈ CÓ DUY NHẤT thẻ Base mới được phép kéo lên các ô Foundation. Thẻ Math tuyệt đối không được kéo lên đây. Thẻ Base có thể kéo lên Foundation bất cứ lúc nào (dù chưa đầy hay đã đầy count).
-6. **Cơ chế Super Reshuffle (Guaranteed Winnable):** Khi người chơi (hoặc Auto Play) rơi vào trạng thái "bị kẹt", hệ thống sẽ tự động kích hoạt **Super Reshuffle** để trộn lại toàn bộ các lá bài chưa lật ở Tableau và bài dư (Stock/Waste). 
-   - **Định nghĩa "Bị kẹt":** Không có bất kỳ nước đi hợp lệ nào (kể cả bốc bài). Việc bưng 1 cột sang 1 cột trống khác không làm thay đổi thế bài nên không tính là nước đi hợp lệ.
-   - **Thuật toán trộn (Smart Heuristic + Verify):** 
-     - **Mớm bài (Feed the Board):** Hệ thống mớm sẵn thẻ Math tương ứng với các Base đang ngửa lên đầu Nọc.
-     - **Chống chôn (Anti-Burying):** Không rải thẻ Math úp xuống dưới thẻ Base cùng loại.
-     - **Verify:** Chạy thuật toán Quick Solve ngầm để đảm bảo ván bài trộn ra chắc chắn 100% có đường thắng rồi mới hiển thị cho người chơi.
+6. **Cơ chế Super Reshuffle (Guaranteed Winnable):** Khi rơi vào trạng thái "bị kẹt" (không còn bất kỳ nước đi hợp lệ nào để lật thêm bài), hệ thống sẽ tự động kích hoạt Super Reshuffle. 
+   **Giải thích thuật toán cho Dev (2 bước):**
+   - **Bước 1: Trộn bài có chủ đích (Smart Shuffle)**
+     - Gom toàn bộ bài đang úp ở Tableau và bài trong Stock/Waste thành một `pool`.
+     - *Bơm bài (Feeder):* Quét các thẻ Base đang ngửa trên bàn. Tìm trong `pool` các thẻ Math tương ứng và nhét chúng vào đầu Draw Pile. Đảm bảo người chơi bốc bài là có nước đi ngay.
+     - *Chống kẹt (Anti-Burying):* Rải ngẫu nhiên số bài còn lại vào các ô úp của Tableau. Lưu ý: Cột nào đang có thẻ Base ngửa thì **KHÔNG** rải thẻ Math cùng loại úp xuống dưới cột đó (tránh việc thẻ chìa khóa bị đè bởi chính ổ khóa).
+   - **Bước 2: Test ngầm (Auto-Verify)**
+     - Thuật toán sinh ra kết quả của Bước 1, nhưng chưa hiển thị ngay.
+     - Cho Bot chạy thuật toán `Quick Solve` trên kết quả đó (giới hạn 3000 vòng lặp). Nếu Bot giải thắng -> Áp dụng kết quả lên UI cho người chơi. Nếu Bot bí đường -> Bỏ kết quả đó, quay lại Bước 1 trộn lại (Tối đa 5 lần thử).
 ---
 
 ## 3. Cơ chế Chia bài (Thứ tự cố định)
