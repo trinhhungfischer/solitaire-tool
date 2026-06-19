@@ -42,6 +42,7 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
   else destArray = newState.foundations[destIndex];
 
   let validMove = false;
+  let wasCompleted = false;
 
   if (bottomCardToMove.kind === 0) {
     if (destArray.length > 0) {
@@ -57,6 +58,7 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
             destArray[destArray.length - 1] = newDestCard;
             if (destType === 'foundation' && newDestCard.absorbedCount >= newDestCard.category.elementCount) {
               destArray.pop();
+              wasCompleted = true;
             }
           }
         } else {
@@ -75,7 +77,7 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
       validMove = true;
       sourceArray.splice(source.startIndex);
       if (destType === 'foundation' && (bottomCardToMove.absorbedCount || 0) >= bottomCardToMove.category.elementCount) {
-        // Disappears into the foundation
+        wasCompleted = true;
       } else {
         destArray.push(...cardsToMove);
       }
@@ -116,6 +118,11 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
       newState.lastAction = `Dùng [${cardName}] nuốt bài ở ${destName}`;
     } else if (bottomCardToMove.kind === 0 && destArray.length > 0 && destArray[destArray.length - 1].kind === 1 && gameRule !== 'new') {
       newState.lastAction = `Đưa [${cardName}] cho Base Card nuốt`;
+    }
+    
+    if (wasCompleted) {
+      const baseCardName = bottomCardToMove.wordText || bottomCardToMove.wordImageKey || `Category ${bottomCardToMove.category.id}`;
+      newState.lastAction += `\n🎉 Hoàn thành Base [${baseCardName}]!`;
     }
     
     return newState;

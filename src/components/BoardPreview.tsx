@@ -282,6 +282,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
   const handleQuickSolve = () => {
     if (!gameState || isAutoPlaying || isQuickSolving) return;
     setIsQuickSolving(true);
+    setAutoReshuffleCount(0);
     setTimeout(() => {
       const path = solveGame(gameState, gameRule, 50000);
       if (path && path.length > 0) {
@@ -758,7 +759,18 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
                   }`}
                   title={h === gameState ? "Hiện tại" : "Click để tua về thời điểm này"}
                 >
-                  <span className={`${h === gameState ? 'text-indigo-400/60' : 'text-white/40'} w-8 inline-block`}>#{h.moves}</span> {h.lastAction}
+                  <div className="flex flex-col gap-1">
+                    {h.lastAction.split('\n').map((line, lineIdx) => (
+                      <div key={lineIdx} className="flex items-start">
+                        {lineIdx === 0 ? (
+                          <span className={`${h === gameState ? 'text-indigo-400/60' : 'text-white/40'} w-10 shrink-0 inline-block`}>#{h.moves}</span>
+                        ) : (
+                          <span className="w-10 shrink-0 inline-block"></span>
+                        )}
+                        <span>{line}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </>
