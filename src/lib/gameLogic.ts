@@ -172,6 +172,11 @@ export function checkHasAvailableMoves(state: GameState, gameRule: string): bool
         }
         for (let i = 0; i < state.cols.length; i++) {
           if (i === colIndex) continue;
+          
+          // Prevent infinite loop "fake" moves: moving a whole column (startIndex === 0) 
+          // to an empty column shouldn't count as a valid move that prevents being "stuck"
+          if (j === 0 && state.cols[i].length === 0) continue;
+
           if (computeDropState(state, src, 'col', i, gameRule)) return true;
         }
       }
