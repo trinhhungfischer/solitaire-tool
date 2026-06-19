@@ -47,7 +47,7 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
   if (bottomCardToMove.kind === 0) {
     if (destArray.length > 0) {
       const destCard = destArray[destArray.length - 1];
-      if (destCard.category.id === bottomCardToMove.category.id) {
+      if (destCard.category.id == bottomCardToMove.category.id) {
         if (destCard.kind === 1) {
           if (gameRule === 'new' && destType === 'col') {
             validMove = false;
@@ -83,12 +83,12 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
       }
     } else if (gameRule === 'new' && destType === 'col') {
       const destCard = destArray[destArray.length - 1];
-      if (destCard.kind === 0 && destCard.category.id === bottomCardToMove.category.id) {
+      if (destCard.kind === 0 && destCard.category.id == bottomCardToMove.category.id) {
         validMove = true;
         let matchCount = 0;
         for (let i = destArray.length - 1; i >= 0; i--) {
           const c = destArray[i];
-          if (c.kind === 0 && c.category.id === destCard.category.id && c.isRevealed) matchCount++;
+          if (c.kind === 0 && c.category.id == destCard.category.id && c.isRevealed) matchCount++;
           else break;
         }
         destArray.splice(destArray.length - matchCount, matchCount);
@@ -157,7 +157,7 @@ export function checkHasAvailableMoves(state: GameState, gameRule: string): bool
         else {
           for (let k = j; k < col.length; k++) {
             const c = col[k];
-            if (c.kind !== 0 || c.category.id !== card.category.id || !c.isRevealed) {
+            if (c.kind !== 0 || c.category.id != card.category.id || !c.isRevealed) {
               isValidStack = false;
               break;
             }

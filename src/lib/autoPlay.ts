@@ -28,7 +28,7 @@ function evaluateMoves(prevState: GameState, gameRule: string, depth: number, ma
         else {
           for (let k = j; k < col.length; k++) {
             const c = col[k];
-            if (c.kind !== 0 || c.category.id !== card.category.id || !c.isRevealed) {
+            if (c.kind !== 0 || c.category.id != card.category.id || !c.isRevealed) {
               isValidStack = false;
               break;
             }

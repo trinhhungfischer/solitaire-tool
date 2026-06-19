@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { Download, Plus, Trash2, LayoutGrid, Upload } from 'lucide-react';
+import { Settings2, Plus, Trash2, Upload, Rewind, Play, Pause, FastForward, Zap, Download, LayoutGrid, Undo2 } from 'lucide-react';
 
 import CardBuilder from './components/CardBuilder';
 import type { CardData } from './components/CardBuilder';
 import BoardPreview from './components/BoardPreview';
+
+// In-memory cache to speed up level loading
+const levelCache = new Map<number, any>();
 
 interface LevelConfig {
   levelId: number;
@@ -22,13 +25,23 @@ function App() {
     return saved ? parseInt(saved, 10) : 1;
   });
   const [gameRule, setGameRule] = useState<'classic' | 'new'>('new');
+  const [isEditorMode, setIsEditorMode] = useState(false);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [levelData, setLevelData] = useState<LevelConfig | null>(null);
+  const [editorHistory, setEditorHistory] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(false);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(false);
+  const [autoPlayStrategy, setAutoPlayStrategy] = useState<'priority' | 'tree'>('priority');
+  const [autoPlaySpeed, setAutoPlaySpeed] = useState(500);
+  const [instantTrigger, setInstantTrigger] = useState(0);
+  
+  // Game Log Preserved State
+  const [showLog, setShowLog] = useState(false);
+  const [logHeight, setLogHeight] = useState(300);
 
   // Resizable sidebar state
-  const [sidebarWidth, setSidebarWidth] = useState(500);
+  const [sidebarWidth, setSidebarWidth] = useState(typeof window !== 'undefined' ? window.innerWidth / 3 : 400);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -71,7 +84,8 @@ function App() {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging) return;
       const newWidth = document.body.clientWidth - e.clientX;
-      if (newWidth > 350 && newWidth < 800) {
+      const maxWidth = document.body.clientWidth * 0.8;
+      if (newWidth > 300 && newWidth < maxWidth) {
         setSidebarWidth(newWidth);
       }
     };
@@ -97,6 +111,7 @@ function App() {
   useEffect(() => {
     localStorage.setItem('SelectedLevelId', selectedLevelId.toString());
     setIsAutoPlaying(false);
+    setEditorHistory([]); // clear history on level switch
     loadLevel(selectedLevelId);
   }, [selectedLevelId]);
 
@@ -106,6 +121,33 @@ function App() {
       localStorage.setItem(`Draft_Level_${levelData.levelId}`, JSON.stringify(levelData));
     }
   }, [levelData]);
+
+  const updateLevelDataWithHistory = (newData: LevelConfig) => {
+    if (levelData) {
+      setEditorHistory(prev => [...prev, JSON.stringify(levelData)]);
+    }
+    setLevelData(newData);
+  };
+
+  const handleUndo = () => {
+    if (editorHistory.length > 0) {
+      const prevStr = editorHistory[editorHistory.length - 1];
+      const newHistory = editorHistory.slice(0, -1);
+      setEditorHistory(newHistory);
+      setLevelData(JSON.parse(prevStr));
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isEditorMode && e.ctrlKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isEditorMode, editorHistory]);
 
   const loadLevel = async (id: number) => {
     setIsLoading(true);
@@ -118,11 +160,19 @@ function App() {
         return;
       }
 
-      const response = await fetch(`/level/Level_${id}.json?t=${new Date().getTime()}`);
+      if (levelCache.has(id)) {
+        setLevelData(levelCache.get(id));
+        setIsLoading(false);
+        return;
+      }
+
+      // Allow browser to cache the file natively (removed ?t= cache buster)
+      const response = await fetch(`/level/Level_${id}.json`);
       if (!response.ok) {
         throw new Error(`Failed to load Level ${id}. File might not exist.`);
       }
       const data: LevelConfig = await response.json();
+      levelCache.set(id, data);
       setLevelData(data);
     } catch (err: any) {
       setError(err.message);
@@ -132,29 +182,93 @@ function App() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!levelData) return;
     
-    // Create a Blob from the JSON string
-    const jsonString = JSON.stringify(levelData, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
+    // Deep clone the data to avoid mutating the React state
+    const exportData = JSON.parse(JSON.stringify(levelData));
     
-    // Create download link
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Level_${levelData.levelId}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    // Recursively remove __id fields from the exported data
+    const stripInternalIds = (obj: any) => {
+      if (Array.isArray(obj)) {
+        obj.forEach(stripInternalIds);
+      } else if (obj !== null && typeof obj === 'object') {
+        if ('__id' in obj) {
+          delete obj.__id;
+        }
+        Object.values(obj).forEach(stripInternalIds);
+      }
+    };
+    
+    stripInternalIds(exportData);
+    
+    // Create a JSON string without the internal __id fields
+    const jsonString = JSON.stringify(exportData, null, 2);
+    
+    try {
+      if ('showSaveFilePicker' in window) {
+        // Use File System Access API if available
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: `Level_${levelData.levelId}.json`,
+          types: [{
+            description: 'JSON File',
+            accept: { 'application/json': ['.json'] },
+          }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(jsonString);
+        await writable.close();
+      } else {
+        // Fallback for browsers that don't support it
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Level_${levelData.levelId}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error('Error saving file:', err);
+        alert('Failed to save file. Please check console for details.');
+      }
+    }
   };
 
   const handleResetDraft = () => {
-    if (confirm('Are you sure you want to discard your unsaved changes and reload from the original file?')) {
-      localStorage.removeItem(`Draft_Level_${selectedLevelId}`);
+    if (confirm('Are you sure you want to discard ALL unsaved changes for ALL levels and reload from original files?')) {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('Draft_Level_')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      levelCache.clear();
+      setEditorHistory([]);
       loadLevel(selectedLevelId);
     }
+  };
+
+  const handleSwapCards = (sourceId: string, destId: string) => {
+    if (!levelData) return;
+    const newData = [...levelData.data];
+    const sourceIndex = newData.findIndex(c => c.__id === sourceId);
+    const destIndex = newData.findIndex(c => c.__id === destId);
+    if (sourceIndex >= 0 && destIndex >= 0 && sourceIndex !== destIndex) {
+      const temp = newData[sourceIndex];
+      newData[sourceIndex] = newData[destIndex];
+      newData[destIndex] = temp;
+      updateLevelDataWithHistory({ ...levelData, data: newData });
+    }
+  };
+
+  const handleCardClick = (cardId: string) => {
+    setSelectedCardId(cardId);
   };
 
   return (
@@ -191,6 +305,13 @@ function App() {
         
         <div className="flex gap-2">
           <button
+            onClick={() => setIsEditorMode(!isEditorMode)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors border ${isEditorMode ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}
+            title="Kích hoạt chế độ thiết kế màn chơi"
+          >
+            Editor Mode: {isEditorMode ? 'ON' : 'OFF'}
+          </button>
+          <button
             onClick={() => setGameRule(prev => prev === 'classic' ? 'new' : 'classic')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors border ${gameRule === 'new' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}
           >
@@ -205,13 +326,23 @@ function App() {
             onChange={handleImport} 
           />
           <div className="flex gap-2">
+            {isEditorMode && editorHistory.length > 0 && (
+              <button
+                onClick={handleUndo}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg flex items-center gap-2 transition-colors font-medium border border-slate-200"
+                title="Undo previous action (Ctrl+Z)"
+              >
+                <Undo2 className="w-4 h-4" />
+                Undo
+              </button>
+            )}
             <button
               onClick={handleResetDraft}
               className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg flex items-center gap-2 transition-colors font-medium border border-red-200"
-              title="Khôi phục lại file gốc (xóa nháp)"
+              title="Khôi phục lại file gốc toàn bộ màn chơi (xóa nháp)"
             >
               <Trash2 className="w-4 h-4" />
-              Reset
+              Reset All
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -250,7 +381,17 @@ function App() {
               maxMoves={levelData.maxMoves}
               gameRule={gameRule}
               isAutoPlaying={isAutoPlaying}
+              autoPlayStrategy={autoPlayStrategy}
+              autoPlaySpeed={autoPlaySpeed}
+              instantTrigger={instantTrigger}
               onStopAutoPlay={() => setIsAutoPlaying(false)}
+              showLog={showLog}
+              setShowLog={setShowLog}
+              logHeight={logHeight}
+              setLogHeight={setLogHeight}
+              isEditorMode={isEditorMode}
+              onSwapCards={handleSwapCards}
+              onCardClick={handleCardClick}
             />
           )}
         </div>
@@ -272,53 +413,92 @@ function App() {
 
           {!isLoading && !error && levelData && (
             <div className="p-4 space-y-4">
-              
-              {/* Global Settings */}
+                    {/* Level Configuration */}
               <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                <div className="flex justify-between items-center mb-3 border-b pb-2">
-                  <h3 className="text-lg font-semibold">Global Settings</h3>
-                  <button 
-                    onClick={() => setIsAutoPlaying(!isAutoPlaying)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm ${isAutoPlaying ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200' : 'bg-solitaire-green text-white hover:bg-solitaire-dark border border-transparent'}`}
-                  >
-                    {isAutoPlaying ? 'Stop Auto Play' : 'Start Auto Play'}
-                  </button>
-                </div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-2">
+                  <Settings2 className="w-4 h-4" /> Level Settings
+                </h3>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Level ID</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Level ID</label>
                     <input 
                       type="number" 
                       value={levelData.levelId}
                       onChange={(e) => setLevelData({...levelData, levelId: parseInt(e.target.value)})}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-solitaire-green focus:border-transparent text-sm"
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-solitaire-green focus:border-transparent text-sm bg-slate-50"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Max Moves</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Max Moves</label>
                     <input 
                       type="number" 
                       value={levelData.maxMoves}
                       onChange={(e) => setLevelData({...levelData, maxMoves: parseInt(e.target.value)})}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-solitaire-green focus:border-transparent text-sm"
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-solitaire-green focus:border-transparent text-sm bg-slate-50"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Foundation Count</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Foundations</label>
                     <select 
                       value={levelData.foundationCount}
                       onChange={(e) => setLevelData({...levelData, foundationCount: parseInt(e.target.value)})}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-solitaire-green focus:border-transparent text-sm"
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-solitaire-green focus:border-transparent text-sm bg-slate-50"
                     >
                       <option value={3}>3 Slots</option>
                       <option value={4}>4 Slots</option>
                       <option value={5}>5 Slots</option>
                     </select>
                   </div>
-
                 </div>
               </div>
 
+              {/* Auto Play Controls */}
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                    <Play className="w-4 h-4" /> Auto Play
+                  </h3>
+                  <select
+                    value={autoPlayStrategy}
+                    onChange={(e) => setAutoPlayStrategy(e.target.value as 'priority' | 'tree')}
+                    className="px-2 py-1 text-xs font-medium border border-slate-200 rounded text-slate-600 bg-slate-50 focus:outline-none"
+                  >
+                    <option value="priority">C# Priority</option>
+                    <option value="tree">Tree Search</option>
+                  </select>
+                </div>
+                
+                <div className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-100">
+                  <button 
+                    onClick={() => setAutoPlaySpeed(s => Math.min(s + 200, 1000))} 
+                    title="Chậm lại (Tăng Delay)" 
+                    className="p-2 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 transition-colors shadow-sm border border-transparent hover:border-slate-200"
+                  >
+                    <Rewind className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={() => setIsAutoPlaying(!isAutoPlaying)}
+                    className={`px-4 py-2 flex items-center justify-center gap-2 rounded-md text-sm font-bold transition-all shadow-md min-w-[130px] ${isAutoPlaying ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-solitaire-green text-white hover:bg-solitaire-dark'}`}
+                  >
+                    {isAutoPlaying ? <><Pause className="w-4 h-4 fill-current" /> Pause</> : <><Play className="w-4 h-4 fill-current" /> Start</>}
+                  </button>
+                  <button 
+                    onClick={() => setAutoPlaySpeed(s => Math.max(s - 200, 50))} 
+                    title="Nhanh hơn (Giảm Delay)" 
+                    className="p-2 hover:bg-white rounded-md text-slate-500 hover:text-slate-700 transition-colors shadow-sm border border-transparent hover:border-slate-200"
+                  >
+                    <FastForward className="w-4 h-4" />
+                  </button>
+                  <div className="w-px h-6 bg-slate-200 mx-1"></div>
+                  <button 
+                    onClick={() => setInstantTrigger(t => t + 1)} 
+                    title="Instant Complete (Hoàn thành ngay)" 
+                    className="p-2 hover:bg-yellow-400 bg-yellow-100 rounded-md text-yellow-700 transition-colors shadow-sm border border-yellow-200"
+                  >
+                    <Zap className="w-4 h-4 fill-current" />
+                  </button>
+                </div>
+              </div>
               {/* Board Layout Builder */}
               <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                 <div className="flex justify-between items-center mb-3 border-b pb-2">
@@ -327,7 +507,7 @@ function App() {
                     onClick={() => {
                       const newCols = [...(levelData.columnCards || [])];
                       newCols.push(4); // Default new column has 4 cards
-                      setLevelData({...levelData, columnCards: newCols});
+                      updateLevelDataWithHistory({...levelData, columnCards: newCols});
                     }}
                     className="flex items-center gap-1 text-sm text-solitaire-green font-medium hover:text-solitaire-dark"
                   >
@@ -344,7 +524,7 @@ function App() {
                           onClick={() => {
                             const newCols = [...levelData.columnCards];
                             newCols.splice(index, 1);
-                            setLevelData({...levelData, columnCards: newCols});
+                            updateLevelDataWithHistory({...levelData, columnCards: newCols});
                           }}
                           className="text-slate-400 hover:text-red-500 transition-colors"
                           title="Remove Column"
@@ -358,7 +538,7 @@ function App() {
                         onChange={(e) => {
                           const newCols = [...levelData.columnCards];
                           newCols[index] = parseInt(e.target.value) || 0;
-                          setLevelData({...levelData, columnCards: newCols});
+                          updateLevelDataWithHistory({...levelData, columnCards: newCols});
                         }}
                         className="w-full text-center px-2 py-1 border border-slate-300 rounded-md font-bold text-lg focus:outline-none focus:ring-2 focus:ring-solitaire-green"
                       />
@@ -387,7 +567,8 @@ function App() {
                   <CardBuilder 
                     levelId={levelData.levelId} 
                     data={levelData.data} 
-                    onChange={(newData) => setLevelData({...levelData, data: newData})} 
+                    onChange={(newData) => updateLevelDataWithHistory({...levelData, data: newData})} 
+                    selectedCardId={selectedCardId}
                   />
                 </div>
               </div>

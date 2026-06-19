@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import type { CardData } from './CardBuilder';
-import { RefreshCw, Image as ImageIcon, Eye, EyeOff, Undo2, Shuffle, Zap, ClipboardList, X } from 'lucide-react';
+import { RefreshCw, Image as ImageIcon, Eye, EyeOff, Undo2, Shuffle, ClipboardList, X, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { computeDropState, checkHasAvailableMoves } from '../lib/gameLogic';
 import type { PlayableCard, GameState } from '../lib/gameLogic';
 import { getBestAutoMove } from '../lib/autoPlay';
-import { solveGame } from '../lib/solver';
+import { getCSharpAutoMove } from '../lib/autoPlayCSharp';
 
 interface BoardPreviewProps {
   foundationCount: number;
@@ -14,24 +14,62 @@ interface BoardPreviewProps {
   shuffleSeed?: number;
   maxMoves?: number;
   isAutoPlaying?: boolean;
+  autoPlayStrategy?: 'tree' | 'priority';
+  autoPlaySpeed?: number;
+  instantTrigger?: number;
+  showLog: boolean;
+  setShowLog: (show: boolean) => void;
+  logHeight: number;
+  setLogHeight: (height: number) => void;
   onStopAutoPlay?: () => void;
   gameRule?: 'classic' | 'new';
+  isEditorMode?: boolean;
+  onSwapCards?: (sourceId: string, destId: string) => void;
+  onCardClick?: (cardId: string) => void;
 }
 
-export default function BoardPreview({ foundationCount, columnCards, data, maxMoves, isAutoPlaying, onStopAutoPlay, gameRule = 'new' }: BoardPreviewProps) {
+export default function BoardPreview({ 
+  foundationCount, 
+  columnCards, 
+  data, 
+  maxMoves, 
+  isAutoPlaying, 
+  autoPlayStrategy = 'tree', 
+  autoPlaySpeed = 500, 
+  instantTrigger = 0, 
+  showLog,
+  setShowLog,
+  logHeight,
+  setLogHeight,
+  onStopAutoPlay, 
+  gameRule = 'new',
+  isEditorMode = false,
+  onSwapCards,
+  onCardClick
+}: BoardPreviewProps) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [history, setHistory] = useState<GameState[]>([]);
   const [futureHistory, setFutureHistory] = useState<GameState[]>([]);
   const [showHiddenCards, setShowHiddenCards] = useState<boolean>(false);
+  const [showRules, setShowRules] = useState<boolean>(false);
   const [resetCount, setResetCount] = useState<number>(0);
   const [cardsDrawnSinceLastMove, setCardsDrawnSinceLastMove] = useState(0);
   const [autoReshuffleCount, setAutoReshuffleCount] = useState(0);
-  const [isAutoRetryingQuickSolve, setIsAutoRetryingQuickSolve] = useState(false);
-  const [isQuickSolving, setIsQuickSolving] = useState(false);
-  const [quickSolvePath, setQuickSolvePath] = useState<GameState[] | null>(null);
-  const [showLog, setShowLog] = useState(false);
   const activeLogRef = useRef<HTMLDivElement>(null);
   const isTimeTravelingRef = useRef(false);
+
+  const totalReshuffles = useMemo(() => {
+    let count = 0;
+    const allStates = [...history];
+    if (gameState) allStates.push(gameState);
+    
+    for (const state of allStates) {
+      if (state.lastAction && state.lastAction.includes('Reshuffle')) {
+        count++;
+      }
+    }
+    return count;
+  }, [history, gameState]);
 
   const shuffledData = useMemo(() => {
     const arr: PlayableCard[] = data.map(c => ({
@@ -58,30 +96,13 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
   }, [isAutoPlaying]);
 
   useEffect(() => {
-    if (!isQuickSolving || !quickSolvePath || quickSolvePath.length === 0) return;
+    if (!isAutoPlaying || !gameState) return;
     
     const interval = setInterval(() => {
-      const nextState = quickSolvePath[0];
-      setHistory(h => [...h, gameState!]);
-      setFutureHistory([]);
-      setGameState(nextState);
-      
-      const newPath = quickSolvePath.slice(1);
-      setQuickSolvePath(newPath);
-      
-      if (newPath.length === 0) {
-        setIsQuickSolving(false);
-      }
-    }, 50); // Super fast 50ms interval for Quick Solve
-    
-    return () => clearInterval(interval);
-  }, [isQuickSolving, quickSolvePath, gameState]);
-
-  useEffect(() => {
-    if (!isAutoPlaying || !gameState || isQuickSolving) return;
-    
-    const interval = setInterval(() => {
-      const bestMove = getBestAutoMove(gameState, gameRule);
+      const bestMove = autoPlayStrategy === 'priority' 
+        ? getCSharpAutoMove(gameState, gameRule)
+        : getBestAutoMove(gameState, gameRule);
+        
       if (bestMove) {
         setHistory(h => [...h, gameState]);
         setFutureHistory([]);
@@ -156,10 +177,105 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
       if (onStopAutoPlay) {
         onStopAutoPlay();
       }
-    }, 500);
+    }, autoPlaySpeed);
     
     return () => clearInterval(interval);
-  }, [isAutoPlaying, gameState, cardsDrawnSinceLastMove, onStopAutoPlay, gameRule]);
+  }, [isAutoPlaying, autoPlaySpeed, gameState, cardsDrawnSinceLastMove, autoPlayStrategy, onStopAutoPlay, gameRule]);
+
+  useEffect(() => {
+    if (instantTrigger > 0 && gameState) {
+      let current = gameState;
+      let path: GameState[] = [];
+      let stuck = false;
+      let steps = 0;
+      let reshuffleCount = 0;
+      let totalReshufflesInInstant = 0;
+      let localCardsDrawn = 0;
+
+      while (!stuck && steps < 500) {
+        const bestMove = autoPlayStrategy === 'priority' 
+          ? getCSharpAutoMove(current, gameRule)
+          : getBestAutoMove(current, gameRule);
+          
+        if (bestMove) {
+          path.push(current);
+          current = bestMove;
+          localCardsDrawn = 0;
+          reshuffleCount = 0;
+          steps++;
+        } else {
+          const deckSize = current.drawPile.length + current.wastePile.length;
+          if (localCardsDrawn > deckSize + 1 && deckSize > 0) {
+            if (reshuffleCount < 5) {
+              // Super reshuffle logic
+              const pool = [...current.drawPile, ...current.wastePile];
+              const newCols = current.cols.map(col => {
+                const newCol = [];
+                for (const card of col) {
+                  if (!card.isRevealed) pool.push(card);
+                  else newCol.push(card);
+                }
+                return newCol;
+              });
+
+              for (let i = pool.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [pool[i], pool[j]] = [pool[j], pool[i]];
+              }
+
+              const finalCols = current.cols.map((oldCol, colIndex) => {
+                const newCol = [];
+                const faceUpCards = newCols[colIndex];
+                const unrevealedCount = oldCol.length - faceUpCards.length;
+                for (let i = 0; i < unrevealedCount; i++) {
+                  newCol.push({ ...pool.pop()!, isRevealed: false });
+                }
+                newCol.push(...faceUpCards);
+                return newCol;
+              });
+
+              const newDrawPile = pool.map(c => ({ ...c, isRevealed: true }));
+              path.push(current);
+              current = { ...current, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: current.moves + 1, lastAction: 'Bot bị kẹt -> 🔀 Tự động Super Reshuffle' };
+              localCardsDrawn = 0;
+              reshuffleCount++;
+              totalReshufflesInInstant++;
+              steps++;
+            } else {
+              stuck = true;
+            }
+          } else {
+            localCardsDrawn++;
+            if (current.drawPile.length > 0) {
+              const newDraw = [...current.drawPile];
+              const card = newDraw.shift()!;
+              path.push(current);
+              current = { ...current, drawPile: newDraw, wastePile: [...current.wastePile, card], moves: current.moves + 1, lastAction: 'Bot: Rút 1 lá từ Stock' };
+              steps++;
+            } else if (current.wastePile.length > 0) {
+              path.push(current);
+              current = { ...current, drawPile: [...current.wastePile], wastePile: [], moves: current.moves + 1, lastAction: 'Bot: Chuyển Waste về Stock' };
+              steps++;
+            } else {
+              stuck = true;
+            }
+          }
+        }
+      }
+      
+      if (path.length > 0) {
+        setHistory(h => [...h, ...path]);
+        setFutureHistory([]);
+        setGameState(current);
+        if (reshuffleCount > 0) {
+          setAutoReshuffleCount(c => c + reshuffleCount);
+        }
+      }
+      if (isAutoPlaying) {
+        onStopAutoPlay?.();
+      }
+    }
+  }, [instantTrigger]);
 
   useEffect(() => {
     const cols: PlayableCard[][] = [];
@@ -285,6 +401,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
 
   const handleDropOnCol = (e: React.DragEvent, destColIndex: number) => {
     e.preventDefault();
+    if (isEditorMode) return;
     const sourceStr = e.dataTransfer.getData('text/plain');
     if (sourceStr) executeDrop('col', destColIndex, sourceStr);
   };
@@ -301,7 +418,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
   };
 
   const handleUndo = () => {
-    if (history.length > 0 && !isAutoPlaying && !isQuickSolving) {
+    if (history.length > 0 && !isAutoPlaying) {
       const prevState = history[history.length - 1];
       setFutureHistory(prev => [gameState!, ...prev]);
       setGameState(prevState);
@@ -310,7 +427,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
   };
 
   const handleTimeTravel = (historyIndex: number) => {
-    if (isAutoPlaying || isQuickSolving || !gameState) return;
+    if (isAutoPlaying || !gameState) return;
     isTimeTravelingRef.current = true;
     const fullTimeline = [...history, gameState, ...futureHistory];
     const targetState = fullTimeline[historyIndex];
@@ -322,41 +439,9 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
     setCardsDrawnSinceLastMove(0);
   };
 
-  const handleQuickSolve = () => {
-    if (!gameState || isAutoPlaying || isQuickSolving) return;
-    setIsQuickSolving(true);
-    setAutoReshuffleCount(0);
-    setTimeout(() => {
-      const path = solveGame(gameState, gameRule, 50000);
-      if (path && path.length > 0) {
-        setQuickSolvePath(path);
-        setIsAutoRetryingQuickSolve(false);
-      } else {
-        setIsQuickSolving(false);
-        const hasUnrevealed = gameState.cols.some(c => c.some(card => !card.isRevealed));
-        if (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && !hasUnrevealed) {
-          alert("Quick Solve failed: The board is unwinnable from the current state.");
-          setIsAutoRetryingQuickSolve(false);
-        } else {
-          setIsAutoRetryingQuickSolve(true);
-          handleReshuffle(true);
-        }
-      }
-    }, 50);
-  };
-
-  useEffect(() => {
-    if (isAutoRetryingQuickSolve && !isQuickSolving && gameState) {
-      const timer = setTimeout(() => {
-        handleQuickSolve();
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [gameState, isAutoRetryingQuickSolve, isQuickSolving]);
-
   const handleReshuffle = (isAutoTrigger = false) => {
     const hasUnrevealed = gameState?.cols.some(c => c.some(card => !card.isRevealed));
-    if (!gameState || isAutoPlaying || isQuickSolving || (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && !hasUnrevealed)) return;
+    if (!gameState || isAutoPlaying || (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && !hasUnrevealed)) return;
     
     setHistory(h => [...h, gameState]);
     setFutureHistory([]);
@@ -401,7 +486,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
 
       // Extract ALL matching Math cards for the target Foundation Base card
       for (const card of pool) {
-        if (card.kind === 0 && targetCategoryId !== null && card.category.id === targetCategoryId) {
+        if (card.kind === 0 && targetCategoryId !== null && card.category.id == targetCategoryId) {
           feederCards.push(card);
         } else {
           remainingPool.push(card);
@@ -442,28 +527,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
       return { ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: actionText };
     };
 
-    let bestState = generateShuffle();
-
-    // Verification loop (up to 5 tries to find a guaranteed winnable state)
-    // Only verified in 'new' (default) rule mode to avoid heavy processing on classic mode
-    if (gameRule === 'new') {
-      let foundWinnable = false;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const candidateState = attempt === 0 ? bestState : generateShuffle();
-        const path = solveGame(candidateState, gameRule, 3000); // 3000 states limit for speed
-        if (path && path.length > 0) {
-           bestState = candidateState;
-           foundWinnable = true;
-           console.log(`Verified winnable shuffle on attempt ${attempt + 1}`);
-           break;
-        }
-        bestState = candidateState; // keep the latest as fallback
-      }
-      if (!foundWinnable) {
-         console.log("Could not guarantee a winnable shuffle after 5 attempts, using fallback smart shuffle.");
-      }
-    }
-
+    const bestState = generateShuffle();
     setGameState(bestState);
     setCardsDrawnSinceLastMove(0);
     if (isAutoTrigger) {
@@ -471,8 +535,27 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
     }
   };
 
+  const handleLogResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = logHeight;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const newHeight = Math.max(100, Math.min(window.innerHeight * 0.8, startHeight + (startY - moveEvent.clientY)));
+      setLogHeight(newHeight);
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
   useEffect(() => {
-    if (!gameState || isAutoPlaying || isQuickSolving) return;
+    if (!gameState || isAutoPlaying) return;
 
     const hasUnrevealed = gameState.cols.some(c => c.some(card => !card.isRevealed));
     if (!hasUnrevealed && gameState.drawPile.length === 0 && gameState.wastePile.length === 0) return;
@@ -484,7 +567,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [gameState, isAutoPlaying, isQuickSolving, gameRule]);
+  }, [gameState, isAutoPlaying, gameRule]);
 
   if (!gameState) return null;
 
@@ -560,21 +643,20 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
     );
   };
 
+  const stockColsCount = Math.ceil(gameState.drawPile.length / 18);
+  const extraLeftSpace = isEditorMode && stockColsCount > 1 ? (stockColsCount - 1) * 112 : 0;
+
   return (
     <div className="relative w-full h-full bg-[#1A4E2B] overflow-hidden flex flex-col p-6 font-sans">
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-3">
         <div className="bg-[#143d22]/80 backdrop-blur-sm p-1.5 rounded-xl border border-white/10 flex flex-col gap-1 shadow-lg">
           <button 
-            onClick={handleQuickSolve}
-            disabled={isAutoPlaying || isQuickSolving}
-            className="p-2.5 rounded-lg transition-colors flex items-center justify-center text-white/70 hover:bg-white/10 hover:text-yellow-400 disabled:opacity-30 disabled:hover:text-white/70"
-            title="Quick Solve (Instant Complete)"
+            onClick={() => setShowRules(true)}
+            className="p-2.5 rounded-lg transition-colors flex items-center justify-center tooltip-trigger hover:bg-white/10 text-white/70 hover:text-white"
+            title="Luật chơi (Rules)"
           >
-            <Zap className={`w-5 h-5 ${isQuickSolving ? 'animate-pulse text-yellow-400' : ''}`} />
+            <HelpCircle className="w-5 h-5" />
           </button>
-          
-          <div className="w-8 h-px bg-white/10 mx-auto my-1"></div>
-
           <button 
             onClick={() => setShowLog(!showLog)}
             className={`p-2.5 rounded-lg transition-colors flex items-center justify-center tooltip-trigger ${showLog ? 'bg-indigo-500 text-white' : 'hover:bg-white/10 text-white/70 hover:text-white'}`}
@@ -592,7 +674,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
           </button>
           <button 
             onClick={handleUndo}
-            disabled={history.length === 0 || isAutoPlaying || isQuickSolving}
+            disabled={history.length === 0 || isAutoPlaying}
             className="p-2.5 rounded-lg transition-colors flex items-center justify-center text-white/70 hover:bg-white/10 hover:text-white disabled:opacity-30"
             title="Undo"
           >
@@ -601,7 +683,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
           
           <button 
             onClick={() => handleReshuffle(false)}
-            disabled={isAutoPlaying || isQuickSolving || !gameState || (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && !gameState.cols.some(c => c.some(card => !card.isRevealed)))}
+            disabled={isAutoPlaying || !gameState || (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && !gameState.cols.some(c => c.some(card => !card.isRevealed)))}
             className="p-2.5 rounded-lg transition-colors flex items-center justify-center text-white/70 hover:bg-white/10 hover:text-yellow-400 disabled:opacity-30"
             title="Super Reshuffle Deck"
           >
@@ -618,69 +700,77 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
           </button>
         </div>
       </div>
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-center">
-        <div className="bg-black/20 backdrop-blur-md px-6 py-2 rounded-full border border-white/10 text-white shadow-lg text-sm tracking-wide">
-          {maxMoves && maxMoves > 0 ? (
-            <span className={gameState.moves > maxMoves ? 'text-red-400 font-bold' : 'font-medium'}>
-              Moves Left: <span className="font-bold text-lg ml-1">{maxMoves - gameState.moves}</span>
-            </span>
-          ) : (
-            <span className="text-white/80 font-medium">Moves: <span className="text-white font-bold text-lg ml-1">{gameState.moves}</span></span>
-          )}
-        </div>
-      </div>
 
-      <div className="flex-1 max-w-6xl w-full mx-auto flex flex-col gap-8">
+      <div 
+        className="flex-1 w-full mx-auto flex flex-col gap-8 transition-all duration-300 overflow-x-auto"
+        style={{ paddingLeft: `${extraLeftSpace}px` }}
+      >
         
-        {/* Top Area: Draw Pile & Foundations */}
-        <div className="flex justify-between items-start mt-8 pl-16">
+        {/* Top Area: Perfectly Aligned with Tableau */}
+        <div className="flex justify-center gap-4 px-4 mt-8 min-w-max">
           
-          {/* Draw Pile Area */}
-          <div className="flex gap-4">
-            {/* Deck */}
-            <div className="relative">
-              <div className="absolute -top-7 left-0 right-0 text-center text-[12px] font-bold text-white/50 tracking-widest uppercase">Stock</div>
-              <div 
-                className="w-24 h-36 rounded-lg border-2 border-white/20 bg-[#143d22] flex items-center justify-center relative shadow-inner cursor-pointer hover:bg-[#1a4a2a] transition-colors select-none"
-                onClick={handleDrawClick}
-              >
+          {/* Stock (Col 1) */}
+          <div className="w-24 relative">
+            <div className="absolute -top-7 left-0 right-0 text-center text-[12px] font-bold text-white/50 tracking-widest uppercase">Stock</div>
+            <div 
+              className={`w-24 h-36 rounded-lg border-2 border-white/20 bg-[#143d22] flex items-center justify-center relative shadow-inner cursor-pointer hover:bg-[#1a4a2a] transition-colors select-none ${isEditorMode ? 'border-transparent bg-transparent shadow-none hover:bg-transparent cursor-default' : ''}`}
+              onClick={!isEditorMode ? handleDrawClick : undefined}
+            >
               <AnimatePresence>
-                {gameState.drawPile.map((card, idx) => (
-                  <motion.div
-                    key={card.id}
-                    layoutId={card.id}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                    className="absolute inset-0 bg-blue-800 rounded-md border-2 border-white/80 shadow-lg flex items-center justify-center bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-700 to-blue-900"
-                  >
-                    {idx === gameState.drawPile.length - 1 && <div className="text-white/50 font-bold text-xl">{gameState.drawPile.length}</div>}
-                  </motion.div>
-                ))}
+                {gameState.drawPile.map((card, idx) => {
+                  const isFaceUp = isEditorMode; // In editor mode, stock cards are face up
+                  const col = Math.floor(idx / 18);
+                  const row = idx % 18;
+                  const isCovered = row < 17 && idx < gameState.drawPile.length - 1; // Covered if not the last card in the column or pile
+                  return (
+                    <motion.div
+                      key={card.id}
+                      layoutId={card.id}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                      className={isEditorMode 
+                        ? `w-24 h-36 rounded-lg shadow-[0_4px_10px_rgba(0,0,0,0.3)] absolute top-0 left-0 flex flex-col cursor-grab active:cursor-grabbing hover:-translate-y-1 ${card.kind === 1 ? 'bg-amber-50 border-amber-300 border-2' : 'bg-white border-slate-200 border'}` 
+                        : "absolute inset-0 bg-blue-800 rounded-md border-2 border-white/80 shadow-lg flex items-center justify-center bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-700 to-blue-900"}
+                      style={isEditorMode ? { top: `${row * 32}px`, left: `${-col * 112}px`, zIndex: idx } : undefined}
+                      draggable={isEditorMode}
+                      onDragStart={isEditorMode ? (e: any) => { e.dataTransfer.setData('text/editor-card', card.__id); } : undefined}
+                      onDrop={isEditorMode ? (e: any) => {
+                        e.preventDefault();
+                        const sourceId = e.dataTransfer.getData('text/editor-card');
+                        if (sourceId && onSwapCards) onSwapCards(sourceId, card.__id!);
+                      } : undefined}
+                      onDragOver={isEditorMode ? (e) => e.preventDefault() : undefined}
+                      onClick={isEditorMode ? (e) => { e.stopPropagation(); if (onCardClick) onCardClick(card.__id!); } : undefined}
+                    >
+                      {!isEditorMode && idx === gameState.drawPile.length - 1 && <div className="text-white/50 font-bold text-xl">{gameState.drawPile.length}</div>}
+                      {isEditorMode && renderCard(card, isCovered, 'vertical')}
+                    </motion.div>
+                  );
+                })}
               </AnimatePresence>
-              {gameState.drawPile.length === 0 && (
+              {gameState.drawPile.length === 0 && !isEditorMode && (
                 <div className="w-full h-full rounded-md flex items-center justify-center text-white/20 text-3xl font-bold">
                   ↺
                 </div>
               )}
-              </div>
             </div>
+          </div>
 
-            {/* Waste Pile (Stacked) */}
-            <div className="relative">
-              <div className="absolute -top-7 left-0 w-24 text-center text-[12px] font-bold text-white/50 tracking-widest uppercase">Waste</div>
-              <div className="w-32 h-36 relative border-2 border-transparent">
+          {/* Waste (Col 2) */}
+          <div className="w-24 relative">
+            <div className="absolute -top-7 left-0 right-0 text-center text-[12px] font-bold text-white/50 tracking-widest uppercase">Waste</div>
+            <div className="w-24 h-36 relative border-2 border-transparent">
               {gameState.wastePile.length === 0 && (
                 <div className="w-24 h-36 rounded-lg border-2 border-white/10 bg-[#143d22]/50 absolute top-0 left-0" />
               )}
               <AnimatePresence>
                 {gameState.wastePile.map((card, idx, arr) => {
                   const displayIdx = arr.length - 1 - idx;
-                  if (displayIdx > 2) return null; // Only show top 3
+                  if (displayIdx > 2) return null;
                   
                   const isTop = idx === arr.length - 1;
-                  // Reverse the index for visual positioning (0 is top)
                   const visualIdx = 2 - displayIdx;
                   
                   return (
@@ -704,58 +794,56 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
                 })}
               </AnimatePresence>
             </div>
-            </div>
           </div>
 
-          {/* Foundations */}
-          <div className="relative">
-            <div className="absolute -top-7 left-0 right-0 text-center text-[12px] font-bold text-white/50 tracking-widest uppercase">Foundation</div>
-            <div className="flex gap-4">
-              {gameState.foundations.map((foundCards, i) => (
-                <div 
-                  key={i} 
-                  className="w-24 h-36 rounded-lg border-2 border-white/20 bg-[#143d22]/50 flex items-center justify-center relative"
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDropOnFoundation(e, i)}
-                >
-                  {foundCards.length === 0 ? (
-                    <span className="text-white/20 text-3xl font-black">A</span>
-                  ) : (
-                    <AnimatePresence>
-                      {foundCards.map((card, cardIndex) => {
-                        const isTop = cardIndex === foundCards.length - 1;
-                        return (
-                          <motion.div 
-                            key={card.id}
-                            layoutId={card.id}
-                            initial={{ scale: 1.2, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                            className={`w-24 h-36 rounded-lg shadow-[0_4px_10px_rgba(0,0,0,0.3)] absolute top-0 left-0 
-                              ${isTop ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1' : ''}
-                              ${card.kind === 1 ? 'bg-amber-50 border-amber-300 border-2' : 'bg-white border-slate-200 border'}
-                            `}
-                            style={{ zIndex: cardIndex }}
-                            draggable={isTop}
-                            onDragStart={isTop ? (e: any) => handleDragStart(e, { type: 'foundation', index: i, startIndex: foundCards.length - 1 }) : undefined}
-                          >
-                            {renderCard(card, false, 'none')}
-                          </motion.div>
-                        );
-                      })}
-                    </AnimatePresence>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Spacer (Col 3) */}
+          <div className="w-24 relative"></div>
 
+          {/* Foundations (Cols 4-7) */}
+          {gameState.foundations.map((foundCards, i) => (
+            <div key={i} className="w-24 relative">
+              {i === 0 && <div className="absolute -top-7 left-0 right-0 text-center text-[12px] font-bold text-white/50 tracking-widest uppercase whitespace-nowrap">Foundation</div>}
+              <div 
+                className="w-24 h-36 rounded-lg border-2 border-white/20 bg-[#143d22]/50 flex items-center justify-center relative"
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDropOnFoundation(e, i)}
+              >
+                {foundCards.length === 0 ? (
+                  <span className="text-white/20 text-3xl font-black">A</span>
+                ) : (
+                  <AnimatePresence>
+                    {foundCards.map((card, cardIndex) => {
+                      const isTop = cardIndex === foundCards.length - 1;
+                      return (
+                        <motion.div 
+                          key={card.id}
+                          layoutId={card.id}
+                          initial={{ scale: 1.2, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                          className={`w-24 h-36 rounded-lg shadow-[0_4px_10px_rgba(0,0,0,0.3)] absolute top-0 left-0 
+                            ${isTop ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1' : ''}
+                            ${card.kind === 1 ? 'bg-amber-50 border-amber-300 border-2' : 'bg-white border-slate-200 border'}
+                          `}
+                          style={{ zIndex: cardIndex }}
+                          draggable={isTop}
+                          onDragStart={isTop ? (e: any) => handleDragStart(e, { type: 'foundation', index: i, startIndex: foundCards.length - 1 }) : undefined}
+                        >
+                          {renderCard(card, false, 'none')}
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Bottom Area: Tableau (Columns) */}
         <div className="relative flex-1 flex flex-col pt-8 mt-4">
           <div className="absolute top-0 left-0 right-0 text-center text-[12px] font-bold text-white/50 tracking-widest uppercase">Tableau</div>
-          <div className="flex-1 flex justify-center gap-4 px-4 overflow-x-auto pb-8">
+          <div className="flex-1 flex justify-center gap-4 px-4 pb-8 min-w-max">
           {gameState.cols.map((colCards, colIndex) => (
             <div 
               key={colIndex} 
@@ -771,16 +859,16 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
               {colCards.map((card, cardIndex) => {
                 const isTopCard = cardIndex === colCards.length - 1;
                 // isRevealed tells us if it's face up permanently. showHiddenCards forces it.
-                const isFaceUp = card.isRevealed || showHiddenCards;
+                const isFaceUp = card.isRevealed || showHiddenCards || isEditorMode;
 
                 // Check if this card and all cards below it form a valid stack
                 // A valid stack must be all face up, all Kind 0 (Math), and same category ID
-                let isDraggable = isTopCard;
-                if (!isTopCard && isFaceUp && card.kind === 0) {
+                let isDraggable = isEditorMode ? true : isTopCard;
+                if (!isEditorMode && !isTopCard && isFaceUp && card.kind === 0) {
                   let isValidStack = true;
                   for (let k = cardIndex; k < colCards.length; k++) {
                     const c = colCards[k];
-                    if (c.kind !== 0 || c.category.id !== card.category.id || !(c.isRevealed || showHiddenCards)) {
+                    if (c.kind !== 0 || c.category.id != card.category.id || !(c.isRevealed || showHiddenCards)) {
                       isValidStack = false;
                       break;
                     }
@@ -803,12 +891,16 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
                     style={{ top: `${cardIndex * 32}px`, zIndex: cardIndex }}
                     draggable={isDraggable}
                     onDragStart={(e: any) => {
+                      if (isEditorMode) {
+                        e.dataTransfer.setData('text/editor-card', card.__id);
+                        return;
+                      }
                       if (isDraggable) {
                         let rootIndex = cardIndex;
                         if (card.kind === 0) {
                           while (rootIndex > 0) {
                             const prevCard = colCards[rootIndex - 1];
-                            if (prevCard.isRevealed && prevCard.kind === 0 && prevCard.category.id === card.category.id) {
+                            if (prevCard.isRevealed && prevCard.kind === 0 && prevCard.category.id == card.category.id) {
                               rootIndex--;
                             } else {
                               break;
@@ -820,6 +912,14 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
                         e.preventDefault();
                       }
                     }}
+                    onDrop={isEditorMode ? (e: any) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const sourceId = e.dataTransfer.getData('text/editor-card');
+                      if (sourceId && onSwapCards) onSwapCards(sourceId, card.__id!);
+                    } : undefined}
+                    onDragOver={isEditorMode ? (e) => e.preventDefault() : undefined}
+                    onClick={isEditorMode ? (e) => { e.stopPropagation(); if (onCardClick) onCardClick(card.__id!); } : undefined}
                   >
                     {isFaceUp ? renderCard(card, !isTopCard, 'vertical') : (
                       <div className="absolute inset-0 rounded-md border border-white/20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-700 to-blue-900 m-1 flex items-center justify-center">
@@ -834,28 +934,37 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
           ))}
           </div>
         </div>
-        <div className="absolute top-4 right-4 bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-white font-medium border border-white/20 shadow-lg z-50">
-          Moves: {gameState.moves} | Cards: {cardsLeft}
-          {isQuickSolving && <div className="text-yellow-300 text-sm mt-1 animate-pulse">Calculating Path...</div>}
+        <div className="absolute top-4 right-4 bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-white font-medium border border-white/20 shadow-lg z-50 flex items-center gap-3 whitespace-nowrap text-sm shrink-0">
+          <span className="text-yellow-300">Left: {(maxMoves || 0) - gameState.moves}</span>
+          <span className="text-white/30">|</span>
+          <span>Moves: {gameState.moves}</span>
+          <span className="text-white/30">|</span>
+          <span>Cards: {cardsLeft}</span>
         </div>
       </div>
 
       {/* Game Log Drawer */}
       <div 
-        className={`absolute bottom-0 left-0 right-0 bg-[#0f2e1a]/95 backdrop-blur-lg border-t border-white/20 shadow-2xl transition-transform duration-300 ease-in-out z-40 flex flex-col ${showLog ? 'translate-y-0' : 'translate-y-full'}`}
-        style={{ height: '35vh' }}
+        className={`absolute bottom-0 left-0 right-0 bg-[#0f2e1a]/60 backdrop-blur-sm shadow-[0_-10px_30px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-in-out z-40 flex flex-col ${showLog ? 'translate-y-0' : 'translate-y-full'}`}
+        style={{ height: `${logHeight}px` }}
       >
-        <div className="flex justify-between items-center px-6 py-3 border-b border-white/10 shrink-0">
+        {/* Resize Handle */}
+        <div 
+          className="absolute top-0 left-0 right-0 h-3 cursor-row-resize flex justify-center items-center group/resize"
+          onMouseDown={handleLogResizeMouseDown}
+        >
+          <div className="w-16 h-1 bg-white/20 rounded-full group-hover/resize:bg-white/60 transition-colors"></div>
+        </div>
+
+        <div className="flex justify-between items-center px-6 py-3 border-b border-white/10 shrink-0 mt-2">
           <h3 className="text-white font-semibold flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-indigo-400" />
-            Nhật Ký Nước Đi
+            Nhật Ký Nước Đi ({gameState?.moves || 0} bước)
           </h3>
           <div className="flex items-center gap-3">
-            {autoReshuffleCount > 0 && (
-              <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-300 rounded font-mono border border-yellow-500/30" title="Số lần hệ thống tự động Reshuffle">
-                Auto Reshuffles: {autoReshuffleCount}
-              </span>
-            )}
+            <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-300 rounded font-mono border border-yellow-500/30" title="Tổng số lần Reshuffle">
+              Reshuffles: {totalReshuffles}
+            </span>
             <button 
               onClick={() => setShowLog(false)}
               className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/70 hover:text-white"
@@ -905,6 +1014,37 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
           )}
         </div>
       </div>
+
+      {showRules && (
+        <div className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center mb-4 border-b pb-3">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <HelpCircle className="w-6 h-6 text-solitaire-green" />
+                Luật Chơi (Default)
+              </h2>
+              <button onClick={() => setShowRules(false)} className="text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 p-1.5 rounded-lg transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4 text-slate-700 text-[15px] leading-relaxed">
+              <p><strong className="text-indigo-600">1. Math vào Math:</strong> Kéo 1 thẻ Math (hoặc 1 chồng thẻ) lên trên thẻ Math khác <span className="font-semibold text-slate-900">cùng nhóm (Category)</span>.</p>
+              <p><strong className="text-indigo-600">2. Kéo vào ô trống:</strong> Cả thẻ Math và thẻ Base đều được phép kéo vào một cột đang trống trên bàn chơi.</p>
+              <p><strong className="text-indigo-600">3. Base ăn Math:</strong> Có thể cầm thẻ Base đè lên thẻ Math cùng nhóm để "ăn" (tuyệt đối không kéo ngược lại).</p>
+              <p><strong className="text-indigo-600">4. Foundation:</strong> <span className="font-semibold text-slate-900">Chỉ duy nhất thẻ Base</span> mới được kéo lên các ô Foundation ở góc trên cùng.</p>
+              <p><strong className="text-indigo-600">5. Rút bài & Kẹt:</strong> Khi bí bước, bạn có thể rút bài từ Stock (Nọc) hoặc bấm nút Super Reshuffle (Xáo Trộn) để đi tiếp.</p>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button 
+                onClick={() => setShowRules(false)} 
+                className="bg-solitaire-green text-white px-6 py-2.5 rounded-lg font-bold hover:bg-[#143d22] transition-colors shadow-md w-full"
+              >
+                Đã hiểu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
