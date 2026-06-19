@@ -404,7 +404,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
     if (!hasUnrevealed && gameState.drawPile.length === 0 && gameState.wastePile.length === 0) return;
 
     const hasMoves = checkHasAvailableMoves(gameState, gameRule);
-    if (!hasMoves) {
+    if (!hasMoves && gameRule === 'new') {
       const timer = setTimeout(() => {
         handleReshuffle(true);
       }, 1000);
