@@ -55,6 +55,9 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
             sourceArray.splice(source.startIndex);
             const newDestCard = { ...destCard, absorbedCount: (destCard.absorbedCount || 0) + cardsToMove.length };
             destArray[destArray.length - 1] = newDestCard;
+            if (destType === 'foundation' && newDestCard.absorbedCount >= newDestCard.category.elementCount) {
+              destArray.pop();
+            }
           }
         } else {
           validMove = true;
@@ -71,7 +74,11 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
     if (destArray.length === 0) {
       validMove = true;
       sourceArray.splice(source.startIndex);
-      destArray.push(...cardsToMove);
+      if (destType === 'foundation' && (bottomCardToMove.absorbedCount || 0) >= bottomCardToMove.category.elementCount) {
+        // Disappears into the foundation
+      } else {
+        destArray.push(...cardsToMove);
+      }
     } else if (gameRule === 'new' && destType === 'col') {
       const destCard = destArray[destArray.length - 1];
       if (destCard.kind === 0 && destCard.category.id === bottomCardToMove.category.id) {
