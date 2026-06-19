@@ -680,7 +680,7 @@ export default function BoardPreview({
   };
 
   useEffect(() => {
-    if (!gameState || isAutoPlaying) return;
+    if (!gameState || isAutoPlaying || futureHistory.length > 0) return;
 
     const hasUnrevealed = gameState.cols.some(c => c.some(card => !card.isRevealed));
     if (!hasUnrevealed && gameState.drawPile.length === 0 && gameState.wastePile.length === 0) return;
@@ -692,7 +692,7 @@ export default function BoardPreview({
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [gameState, isAutoPlaying, gameRule]);
+  }, [gameState, isAutoPlaying, gameRule, futureHistory.length]);
 
   if (!gameState) return null;
 
