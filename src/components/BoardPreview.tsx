@@ -21,6 +21,7 @@ interface BoardPreviewProps {
 export default function BoardPreview({ foundationCount, columnCards, data, maxMoves, isAutoPlaying, onStopAutoPlay, gameRule = 'new' }: BoardPreviewProps) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [history, setHistory] = useState<GameState[]>([]);
+  const [futureHistory, setFutureHistory] = useState<GameState[]>([]);
   const [showHiddenCards, setShowHiddenCards] = useState<boolean>(false);
   const [resetCount, setResetCount] = useState<number>(0);
   const [cardsDrawnSinceLastMove, setCardsDrawnSinceLastMove] = useState(0);
@@ -57,6 +58,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
     const interval = setInterval(() => {
       const nextState = quickSolvePath[0];
       setHistory(h => [...h, gameState!]);
+      setFutureHistory([]);
       setGameState(nextState);
       
       const newPath = quickSolvePath.slice(1);
@@ -77,6 +79,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
       const bestMove = getBestAutoMove(gameState, gameRule);
       if (bestMove) {
         setHistory(h => [...h, gameState]);
+        setFutureHistory([]);
         setCardsDrawnSinceLastMove(0);
         setAutoReshuffleCount(0); // Reset reshuffles if we made progress
         setGameState(bestMove);
@@ -88,6 +91,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
         if (cardsDrawnSinceLastMove > deckSize + 1 && deckSize > 0) {
           if (autoReshuffleCount < 5) {
             setHistory(h => [...h, gameState]);
+            setFutureHistory([]);
             
             const pool = [...gameState.drawPile, ...gameState.wastePile];
             const newCols = gameState.cols.map(col => {
@@ -128,6 +132,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
         }
         
         setHistory(h => [...h, gameState]);
+        setFutureHistory([]);
         setCardsDrawnSinceLastMove(c => c + 1);
         
         if (gameState.drawPile.length > 0) {
@@ -181,6 +186,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
       lastAction: '🎲 Ván bài mới: Đã trộn và chia bài'
     });
     setHistory([]);
+    setFutureHistory([]);
   }, [shuffledData, columnCards, foundationCount, resetCount]);
 
   const handleRestart = () => {
@@ -191,6 +197,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
     setGameState(prev => {
       if (!prev) return prev;
       setHistory(h => [...h, prev]);
+      setFutureHistory([]);
       
       if (prev.drawPile.length > 0) {
         const newDraw = [...prev.drawPile];
@@ -198,7 +205,6 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
         return { ...prev, drawPile: newDraw, wastePile: [...prev.wastePile, card], moves: prev.moves + 1, lastAction: 'Người chơi: Rút 1 lá từ Stock' };
       } else {
         if (prev.wastePile.length === 0) {
-          setHistory(h => h.slice(0, -1));
           return prev;
         }
         return { ...prev, drawPile: [...prev.wastePile], wastePile: [], moves: prev.moves + 1, lastAction: 'Người chơi: Chuyển Waste về Stock' };
@@ -219,6 +225,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
         const newState = computeDropState(prev, source, destType, destIndex, gameRule);
         if (newState) {
           setHistory(h => [...h, prev]);
+          setFutureHistory([]);
           return newState;
         }
         return prev;
@@ -248,23 +255,27 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
   const handleUndo = () => {
     if (history.length > 0 && !isAutoPlaying && !isQuickSolving) {
       const prevState = history[history.length - 1];
+      setFutureHistory(prev => [gameState!, ...prev]);
       setGameState(prevState);
       setHistory(history.slice(0, -1));
     }
   };
 
   const handleTimeTravel = (historyIndex: number) => {
-    if (isAutoPlaying || isQuickSolving) return;
-    const prevState = history[historyIndex];
-    setGameState(prevState);
-    setHistory(history.slice(0, historyIndex));
+    if (isAutoPlaying || isQuickSolving || !gameState) return;
+    const fullTimeline = [...history, gameState, ...futureHistory];
+    const targetState = fullTimeline[historyIndex];
+    if (!targetState) return;
+    
+    setHistory(fullTimeline.slice(0, historyIndex));
+    setGameState(targetState);
+    setFutureHistory(fullTimeline.slice(historyIndex + 1));
     setCardsDrawnSinceLastMove(0);
   };
 
   const handleQuickSolve = () => {
     if (!gameState || isAutoPlaying || isQuickSolving) return;
     setIsQuickSolving(true);
-    // Timeout to allow React to render any loading state if needed
     setTimeout(() => {
       const path = solveGame(gameState, gameRule, 50000);
       if (path && path.length > 0) {
@@ -277,18 +288,15 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
           alert("Quick Solve failed: The board is unwinnable from the current state.");
           setIsAutoRetryingQuickSolve(false);
         } else {
-          // Board is stuck for Quick Solve, let's automatically shuffle and try again!
           setIsAutoRetryingQuickSolve(true);
-          handleReshuffle(true); // This will update gameState and trigger the retry effect
+          handleReshuffle(true);
         }
       }
     }, 50);
   };
 
-  // Auto retry Quick Solve after a reshuffle
   useEffect(() => {
     if (isAutoRetryingQuickSolve && !isQuickSolving && gameState) {
-      // Delay slightly so the user sees the reshuffle animation before it freezes to solve again
       const timer = setTimeout(() => {
         handleQuickSolve();
       }, 800);
@@ -301,6 +309,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
     if (!gameState || isAutoPlaying || isQuickSolving || (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && !hasUnrevealed)) return;
     
     setHistory(h => [...h, gameState]);
+    setFutureHistory([]);
     
     const pool = [...gameState.drawPile, ...gameState.wastePile];
     const newCols = gameState.cols.map(col => {
@@ -338,7 +347,6 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
     }
   };
 
-  // Auto Super Shuffle Detection
   useEffect(() => {
     if (!gameState || isAutoPlaying || isQuickSolving) return;
 
@@ -723,25 +731,29 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-          {history.length === 0 && !gameState.lastAction ? (
-            <div className="text-white/40 italic text-center py-4">Chưa có nước đi nào...</div>
+          {history.length === 0 && (!gameState || !gameState.lastAction) ? (
+            <div className="flex flex-col items-center justify-center h-full text-white/40 space-y-3">
+              <ClipboardList className="w-8 h-8 opacity-50" />
+              <p>Chưa có nước đi nào</p>
+            </div>
           ) : (
             <>
-              {history.map((h, i) => h.lastAction && (
+              {[...history, gameState, ...futureHistory].map((h, i) => h?.lastAction && (
                 <div 
-                  key={`log-${i}`} 
+                  key={`log-${i}-${h.moves}`} 
                   onClick={() => handleTimeTravel(i)}
-                  className="text-sm px-3 py-2 rounded bg-black/20 text-white/70 font-mono border-l-2 border-transparent hover:bg-white/10 hover:border-white/30 cursor-pointer transition-colors"
-                  title="Click để tua về thời điểm này"
+                  className={`text-sm px-3 py-2 rounded font-mono border-l-2 cursor-pointer transition-colors ${
+                    h === gameState 
+                      ? 'bg-indigo-500/20 text-indigo-100 border-indigo-400' 
+                      : i < history.length
+                        ? 'bg-black/20 text-white/70 border-transparent hover:bg-white/10 hover:border-white/30' 
+                        : 'bg-black/40 text-white/40 border-transparent hover:bg-white/10 hover:border-white/30 opacity-60' 
+                  }`}
+                  title={h === gameState ? "Hiện tại" : "Click để tua về thời điểm này"}
                 >
-                  <span className="text-white/40 w-8 inline-block">#{h.moves}</span> {h.lastAction}
+                  <span className={`${h === gameState ? 'text-indigo-400/60' : 'text-white/40'} w-8 inline-block`}>#{h.moves}</span> {h.lastAction}
                 </div>
               ))}
-              {gameState.lastAction && (
-                <div className="text-sm px-3 py-2 rounded bg-indigo-500/20 text-indigo-100 font-mono border-l-2 border-indigo-400">
-                  <span className="text-indigo-400/60 w-8 inline-block">#{gameState.moves}</span> {gameState.lastAction}
-                </div>
-              )}
               <div ref={logEndRef} />
             </>
           )}
