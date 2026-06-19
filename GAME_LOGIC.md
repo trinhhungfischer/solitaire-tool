@@ -33,7 +33,11 @@ Game hiện tại hỗ trợ 2 bộ luật chơi: **Classic** và **Default (New
    - Khi đó, thẻ Base sẽ "nuốt trọn" (absorb) toàn bộ các thẻ Math đang ngửa của Category đó trên đỉnh cột. 
    - Nếu nuốt đủ số lượng (`elementCount`), thẻ Base nổ tung. Nếu chưa đủ, thẻ Base sẽ nằm đè lên vị trí đó.
 4. **Base kéo vào Ô trống:** Thẻ Base có thể kéo vào một cột Tableau trống hoặc ô Foundation trống.
-5. **Auto Super Reshuffle:** Khi người chơi (hoặc Auto Play) bị kẹt (không còn nước đi hợp lệ nào), hệ thống sẽ tự động kích hoạt **Super Reshuffle** để trộn lại toàn bộ các lá bài chưa lật và bài trên tay (Stock/Waste) nhằm gỡ bí. Bộ đếm số lần kích hoạt Super Reshuffle sẽ được reset về 0 mỗi khi chạy tính năng **Quick Solve**.
+5. **Auto Super Reshuffle:** Khi người chơi (hoặc Auto Play) rơi vào trạng thái "bị kẹt", hệ thống sẽ tự động kích hoạt **Super Reshuffle** để trộn lại toàn bộ các lá bài chưa lật ở Tableau và bài dư (Stock/Waste) nhằm gỡ bí. 
+   - **Định nghĩa trạng thái "Bị kẹt" (No available moves):** Hệ thống sẽ quét toàn diện và xác nhận kẹt nếu thỏa mãn ĐỒNG THỜI 3 điều kiện:
+     - Không thể di chuyển bất kỳ lá bài/cụm bài đang ngửa nào từ Tableau sang cột Tableau khác hoặc lên Foundation.
+     - Lá bài đang lật ngửa ở Waste Pile không thể ghép vào bất kỳ đâu trên Tableau hay Foundation.
+     - Quét trước toàn bộ các lá bài còn nằm trong Nọc (Stock), KHÔNG có lá bài nào có thể tạo ra nước đi hợp lệ nếu nó được bốc ra.
 ---
 
 ## 3. Cơ chế Chia bài (Thứ tự cố định)
