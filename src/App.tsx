@@ -32,8 +32,9 @@ function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isAutoPlaying, setIsAutoPlaying] = useState(false);
-  const [autoPlayStrategy, setAutoPlayStrategy] = useState<'priority' | 'tree'>('priority');
   const [autoPlaySpeed, setAutoPlaySpeed] = useState(500);
+  const [autoPlayStrategy, setAutoPlayStrategy] = useState<'priority' | 'tree'>('priority');
+  const [gameRule, setGameRule] = useState<'default' | 'new'>('default');
   const [instantTrigger, setInstantTrigger] = useState(0);
   
   // Game Log Preserved State
@@ -458,10 +459,10 @@ function App() {
                   <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
                     <Play className="w-4 h-4" /> Auto Play
                   </h3>
-                  <select
+                  <select 
                     value={autoPlayStrategy}
                     onChange={(e) => setAutoPlayStrategy(e.target.value as 'priority' | 'tree')}
-                    className="px-2 py-1 text-xs font-medium border border-slate-200 rounded text-slate-600 bg-slate-50 focus:outline-none"
+                    className="p-1 rounded bg-slate-100 border text-sm"
                   >
                     <option value="priority">C# Priority</option>
                     <option value="tree">Tree Search</option>

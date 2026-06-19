@@ -55,6 +55,7 @@ export default function BoardPreview({
   const [resetCount, setResetCount] = useState<number>(0);
   const [cardsDrawnSinceLastMove, setCardsDrawnSinceLastMove] = useState(0);
   const [autoReshuffleCount, setAutoReshuffleCount] = useState(0);
+  const [isCalculating, setIsCalculating] = useState(false);
   const activeLogRef = useRef<HTMLDivElement>(null);
   const isTimeTravelingRef = useRef(false);
 
@@ -65,6 +66,19 @@ export default function BoardPreview({
     
     for (const state of allStates) {
       if (state.lastAction && state.lastAction.includes('Reshuffle')) {
+        count++;
+      }
+    }
+    return count;
+  }, [history, gameState]);
+
+  const totalRefills = useMemo(() => {
+    let count = 0;
+    const allStates = [...history];
+    if (gameState) allStates.push(gameState);
+    
+    for (const state of allStates) {
+      if (state.lastAction && state.lastAction.includes('Refill')) {
         count++;
       }
     }
@@ -174,6 +188,37 @@ export default function BoardPreview({
       }
 
       // No moves and empty deck
+      const hasUnrevealed = gameState.cols.some(c => c.some(card => !card.isRevealed));
+      if (hasUnrevealed) {
+        // REFILL LOGIC
+        const finalCols = gameState.cols.map(col => [...col]);
+        let extractedCard = null;
+        
+        for (let i = 0; i < finalCols.length; i++) {
+          const col = finalCols[i];
+          const hiddenIdx = col.findIndex(c => !c.isRevealed);
+          if (hiddenIdx !== -1) {
+            extractedCard = col.splice(hiddenIdx, 1)[0];
+            extractedCard.isRevealed = true;
+            break;
+          }
+        }
+        
+        if (extractedCard) {
+          setHistory(h => [...h, gameState]);
+          setFutureHistory([]);
+          setCardsDrawnSinceLastMove(0);
+          setGameState({
+            ...gameState,
+            cols: finalCols,
+            wastePile: [extractedCard],
+            moves: gameState.moves + 1,
+            lastAction: 'Bot bị kẹt & Hết Stock -> 🔄 Tự động Refill (Lấy 1 lá úp từ bàn)'
+          });
+          return;
+        }
+      }
+
       if (onStopAutoPlay) {
         onStopAutoPlay();
       }
@@ -183,97 +228,150 @@ export default function BoardPreview({
   }, [isAutoPlaying, autoPlaySpeed, gameState, cardsDrawnSinceLastMove, autoPlayStrategy, onStopAutoPlay, gameRule]);
 
   useEffect(() => {
-    if (instantTrigger > 0 && gameState) {
-      let current = gameState;
-      let path: GameState[] = [];
-      let stuck = false;
-      let steps = 0;
-      let reshuffleCount = 0;
-      let totalReshufflesInInstant = 0;
-      let localCardsDrawn = 0;
+    if (instantTrigger > 0 && gameState && !isAutoPlaying) {
+      let isCancelled = false;
+      setIsCalculating(true);
 
-      while (!stuck && steps < 500) {
-        const bestMove = autoPlayStrategy === 'priority' 
-          ? getCSharpAutoMove(current, gameRule)
-          : getBestAutoMove(current, gameRule);
+      const runInstantPlay = async () => {
+        let current = gameState;
+        let path: GameState[] = [];
+        let stuck = false;
+        let steps = 0;
+        let reshuffleCount = 0;
+        let totalReshufflesInInstant = 0;
+        let localCardsDrawn = 0;
+
+        while (!stuck && steps < 500) {
+          if (isCancelled) break;
           
-        if (bestMove) {
-          path.push(current);
-          current = bestMove;
-          localCardsDrawn = 0;
-          reshuffleCount = 0;
-          steps++;
-        } else {
-          const deckSize = current.drawPile.length + current.wastePile.length;
-          if (localCardsDrawn > deckSize + 1 && deckSize > 0) {
-            if (reshuffleCount < 5) {
-              // Super reshuffle logic
-              const pool = [...current.drawPile, ...current.wastePile];
-              const newCols = current.cols.map(col => {
-                const newCol = [];
-                for (const card of col) {
-                  if (!card.isRevealed) pool.push(card);
-                  else newCol.push(card);
-                }
-                return newCol;
-              });
+          // Yield to main thread every 5 steps to prevent UI freeze
+          if (steps > 0 && steps % 5 === 0) {
+            await new Promise(r => setTimeout(r, 0));
+            if (isCancelled) break;
+          }
 
-              for (let i = pool.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [pool[i], pool[j]] = [pool[j], pool[i]];
-              }
-
-              const finalCols = current.cols.map((oldCol, colIndex) => {
-                const newCol = [];
-                const faceUpCards = newCols[colIndex];
-                const unrevealedCount = oldCol.length - faceUpCards.length;
-                for (let i = 0; i < unrevealedCount; i++) {
-                  newCol.push({ ...pool.pop()!, isRevealed: false });
-                }
-                newCol.push(...faceUpCards);
-                return newCol;
-              });
-
-              const newDrawPile = pool.map(c => ({ ...c, isRevealed: true }));
-              path.push(current);
-              current = { ...current, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: current.moves + 1, lastAction: 'Bot bị kẹt -> 🔀 Tự động Super Reshuffle' };
-              localCardsDrawn = 0;
-              reshuffleCount++;
-              totalReshufflesInInstant++;
-              steps++;
-            } else {
-              stuck = true;
-            }
+          const bestMove = autoPlayStrategy === 'priority' 
+            ? getCSharpAutoMove(current, gameRule)
+            : getBestAutoMove(current, gameRule);
+            
+          if (bestMove) {
+            path.push(current);
+            current = bestMove;
+            localCardsDrawn = 0;
+            reshuffleCount = 0;
+            steps++;
           } else {
-            localCardsDrawn++;
-            if (current.drawPile.length > 0) {
-              const newDraw = [...current.drawPile];
-              const card = newDraw.shift()!;
-              path.push(current);
-              current = { ...current, drawPile: newDraw, wastePile: [...current.wastePile, card], moves: current.moves + 1, lastAction: 'Bot: Rút 1 lá từ Stock' };
-              steps++;
-            } else if (current.wastePile.length > 0) {
-              path.push(current);
-              current = { ...current, drawPile: [...current.wastePile], wastePile: [], moves: current.moves + 1, lastAction: 'Bot: Chuyển Waste về Stock' };
-              steps++;
+            const deckSize = current.drawPile.length + current.wastePile.length;
+            if (localCardsDrawn > deckSize + 1 && deckSize > 0) {
+              if (reshuffleCount < 5) {
+                // Super reshuffle logic
+                const pool = [...current.drawPile, ...current.wastePile];
+                const newCols = current.cols.map(col => {
+                  const newCol = [];
+                  for (const card of col) {
+                    if (!card.isRevealed) pool.push(card);
+                    else newCol.push(card);
+                  }
+                  return newCol;
+                });
+
+                for (let i = pool.length - 1; i > 0; i--) {
+                  const j = Math.floor(Math.random() * (i + 1));
+                  [pool[i], pool[j]] = [pool[j], pool[i]];
+                }
+
+                const finalCols = current.cols.map((oldCol, colIndex) => {
+                  const newCol = [];
+                  const faceUpCards = newCols[colIndex];
+                  const unrevealedCount = oldCol.length - faceUpCards.length;
+                  for (let i = 0; i < unrevealedCount; i++) {
+                    newCol.push({ ...pool.pop()!, isRevealed: false });
+                  }
+                  newCol.push(...faceUpCards);
+                  return newCol;
+                });
+
+                const newDrawPile = pool.map(c => ({ ...c, isRevealed: true }));
+                path.push(current);
+                current = { ...current, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: current.moves + 1, lastAction: 'Bot bị kẹt -> 🔀 Tự động Super Reshuffle' };
+                localCardsDrawn = 0;
+                reshuffleCount++;
+                totalReshufflesInInstant++;
+                steps++;
+              } else {
+                stuck = true;
+              }
             } else {
-              stuck = true;
+              localCardsDrawn++;
+              if (current.drawPile.length > 0) {
+                const newDraw = [...current.drawPile];
+                const card = newDraw.shift()!;
+                path.push(current);
+                current = { ...current, drawPile: newDraw, wastePile: [...current.wastePile, card], moves: current.moves + 1, lastAction: 'Bot: Rút 1 lá từ Stock' };
+                steps++;
+              } else if (current.wastePile.length > 0) {
+                path.push(current);
+                current = { ...current, drawPile: [...current.wastePile], wastePile: [], moves: current.moves + 1, lastAction: 'Bot: Chuyển Waste về Stock' };
+                steps++;
+              } else {
+                // REFILL LOGIC
+                const hasUnrevealed = current.cols.some(c => c.some(card => !card.isRevealed));
+                if (hasUnrevealed) {
+                  const finalCols = current.cols.map(col => [...col]);
+                  let extractedCard = null;
+                  
+                  for (let i = 0; i < finalCols.length; i++) {
+                    const col = finalCols[i];
+                    const hiddenIdx = col.findIndex(c => !c.isRevealed);
+                    if (hiddenIdx !== -1) {
+                      extractedCard = col.splice(hiddenIdx, 1)[0];
+                      extractedCard.isRevealed = true;
+                      break;
+                    }
+                  }
+                  
+                  if (extractedCard) {
+                    path.push(current);
+                    current = {
+                      ...current,
+                      cols: finalCols,
+                      wastePile: [extractedCard],
+                      moves: current.moves + 1,
+                      lastAction: 'Bot bị kẹt & Hết Stock -> 🔄 Tự động Refill (Lấy 1 lá úp từ bàn)'
+                    };
+                    localCardsDrawn = 0;
+                    steps++;
+                    continue;
+                  }
+                }
+                stuck = true;
+              }
             }
           }
         }
-      }
-      
-      if (path.length > 0) {
-        setHistory(h => [...h, ...path]);
-        setFutureHistory([]);
-        setGameState(current);
-        if (reshuffleCount > 0) {
-          setAutoReshuffleCount(c => c + reshuffleCount);
+        
+        if (!isCancelled) {
+          if (path.length > 0) {
+            setHistory(h => [...h, ...path]);
+            setFutureHistory([]);
+            setGameState(current);
+            if (reshuffleCount > 0) {
+              setAutoReshuffleCount(c => c + reshuffleCount);
+            }
+          }
+          if (isAutoPlaying) {
+            onStopAutoPlay?.();
+          }
+          setIsCalculating(false);
         }
-      }
-      if (isAutoPlaying) {
-        onStopAutoPlay?.();
-      }
+      };
+
+      runInstantPlay();
+
+      return () => {
+        isCancelled = true;
+        setIsCalculating(false);
+      };
     }
   }, [instantTrigger]);
 
@@ -445,6 +543,33 @@ export default function BoardPreview({
     
     setHistory(h => [...h, gameState]);
     setFutureHistory([]);
+
+    if (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && hasUnrevealed) {
+      // REFILL LOGIC
+      const finalCols = gameState.cols.map(col => [...col]);
+      let extractedCard = null;
+      
+      for (let i = 0; i < finalCols.length; i++) {
+        const col = finalCols[i];
+        const hiddenIdx = col.findIndex(c => !c.isRevealed);
+        if (hiddenIdx !== -1) {
+          extractedCard = col.splice(hiddenIdx, 1)[0];
+          extractedCard.isRevealed = true;
+          break;
+        }
+      }
+      
+      if (extractedCard) {
+        setGameState({
+          ...gameState,
+          cols: finalCols,
+          wastePile: [extractedCard],
+          moves: gameState.moves + 1,
+          lastAction: isAutoTrigger ? 'Bot bị kẹt -> 🔄 Tự động Refill' : 'Người chơi: 🔄 Refill (Rút úp)'
+        });
+        return;
+      }
+    }
     
     const generateShuffle = () => {
       const pool = [...gameState.drawPile, ...gameState.wastePile];
@@ -881,7 +1006,6 @@ export default function BoardPreview({
                     key={card.id}
                     layoutId={card.id}
                     initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
                     exit={{ scale: 0, opacity: 0 }}
                     transition={{ type: "spring", stiffness: 300, damping: 25 }}
                     className={`w-24 h-36 rounded-lg shadow-[0_4px_10px_rgba(0,0,0,0.3)] absolute top-0 left-0 flex flex-col 
@@ -965,6 +1089,9 @@ export default function BoardPreview({
             <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-300 rounded font-mono border border-yellow-500/30" title="Tổng số lần Reshuffle">
               Reshuffles: {totalReshuffles}
             </span>
+            <span className="text-xs px-2 py-1 bg-purple-500/20 text-purple-300 rounded font-mono border border-purple-500/30" title="Tổng số lần Refill">
+              Refills: {totalRefills}
+            </span>
             <button 
               onClick={() => setShowLog(false)}
               className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/70 hover:text-white"
@@ -1041,6 +1168,27 @@ export default function BoardPreview({
               >
                 Đã hiểu
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCalculating && (
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm z-[100] flex flex-col items-center justify-center p-4 transition-all duration-300">
+          <div className="bg-[#143d22] p-8 rounded-2xl shadow-2xl flex flex-col items-center gap-6 border-2 border-amber-400/30">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-full border-4 border-amber-400/20 border-t-amber-400 animate-spin"></div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-8 h-8 bg-amber-400 rounded-full animate-pulse opacity-50"></div>
+              </div>
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              <h3 className="text-white font-black text-2xl uppercase tracking-wider drop-shadow-md">
+                Đang Tính Toán...
+              </h3>
+              <p className="text-amber-200/80 text-sm font-medium animate-pulse">
+                Hệ thống đang quét hàng ngàn trường hợp
+              </p>
             </div>
           </div>
         </div>
