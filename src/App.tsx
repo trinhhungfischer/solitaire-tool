@@ -17,7 +17,10 @@ interface LevelConfig {
 }
 
 function App() {
-  const [selectedLevelId, setSelectedLevelId] = useState<number>(1);
+  const [selectedLevelId, setSelectedLevelId] = useState<number>(() => {
+    const saved = localStorage.getItem('SelectedLevelId');
+    return saved ? parseInt(saved, 10) : 1;
+  });
   const [gameRule, setGameRule] = useState<'classic' | 'new'>('new');
   const [levelData, setLevelData] = useState<LevelConfig | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -92,14 +95,29 @@ function App() {
   const levelIds = Array.from({ length: 500 }, (_, i) => i + 1);
 
   useEffect(() => {
+    localStorage.setItem('SelectedLevelId', selectedLevelId.toString());
     setIsAutoPlaying(false);
     loadLevel(selectedLevelId);
   }, [selectedLevelId]);
+
+  // Sync draft to localStorage whenever levelData changes
+  useEffect(() => {
+    if (levelData) {
+      localStorage.setItem(`Draft_Level_${levelData.levelId}`, JSON.stringify(levelData));
+    }
+  }, [levelData]);
 
   const loadLevel = async (id: number) => {
     setIsLoading(true);
     setError(null);
     try {
+      const draft = localStorage.getItem(`Draft_Level_${id}`);
+      if (draft) {
+        setLevelData(JSON.parse(draft));
+        setIsLoading(false);
+        return;
+      }
+
       const response = await fetch(`/level/Level_${id}.json?t=${new Date().getTime()}`);
       if (!response.ok) {
         throw new Error(`Failed to load Level ${id}. File might not exist.`);
@@ -130,6 +148,13 @@ function App() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handleResetDraft = () => {
+    if (confirm('Are you sure you want to discard your unsaved changes and reload from the original file?')) {
+      localStorage.removeItem(`Draft_Level_${selectedLevelId}`);
+      loadLevel(selectedLevelId);
+    }
   };
 
   return (
@@ -179,22 +204,32 @@ function App() {
             ref={fileInputRef} 
             onChange={handleImport} 
           />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-          >
-            <Upload className="w-4 h-4" />
-            Import JSON
-          </button>
-          
-          <button 
-            onClick={handleDownload}
-            disabled={!levelData}
-            className="flex items-center gap-2 bg-solitaire-green hover:bg-solitaire-dark text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            Download JSON
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleResetDraft}
+              className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg flex items-center gap-2 transition-colors font-medium border border-red-200"
+              title="Khôi phục lại file gốc (xóa nháp)"
+            >
+              <Trash2 className="w-4 h-4" />
+              Reset
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg flex items-center gap-2 transition-colors font-medium border border-indigo-200"
+              title="Import JSON"
+            >
+              <Upload className="w-4 h-4" />
+              Import
+            </button>
+            <button 
+              onClick={handleDownload}
+              disabled={!levelData}
+              className="px-4 py-2 bg-solitaire-green hover:bg-emerald-600 text-white rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
+            >
+              <Download className="w-4 h-4" />
+              Export JSON
+            </button>
+          </div>
         </div>
       </header>
 
