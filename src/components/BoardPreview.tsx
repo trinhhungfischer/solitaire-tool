@@ -30,7 +30,8 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
   const [isQuickSolving, setIsQuickSolving] = useState(false);
   const [quickSolvePath, setQuickSolvePath] = useState<GameState[] | null>(null);
   const [showLog, setShowLog] = useState(false);
-  const logEndRef = useRef<HTMLDivElement>(null);
+  const activeLogRef = useRef<HTMLDivElement>(null);
+  const isTimeTravelingRef = useRef(false);
 
   const shuffledData = useMemo(() => {
     const arr: PlayableCard[] = data.map(c => ({
@@ -41,8 +42,12 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
   }, [data]);
 
   useEffect(() => {
-    if (showLog && logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (isTimeTravelingRef.current) {
+      isTimeTravelingRef.current = false;
+      return;
+    }
+    if (showLog && activeLogRef.current) {
+      activeLogRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [gameState?.lastAction, showLog, history.length]);
 
@@ -263,6 +268,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
 
   const handleTimeTravel = (historyIndex: number) => {
     if (isAutoPlaying || isQuickSolving || !gameState) return;
+    isTimeTravelingRef.current = true;
     const fullTimeline = [...history, gameState, ...futureHistory];
     const targetState = fullTimeline[historyIndex];
     if (!targetState) return;
@@ -741,6 +747,7 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
               {[...history, gameState, ...futureHistory].map((h, i) => h?.lastAction && (
                 <div 
                   key={`log-${i}-${h.moves}`} 
+                  ref={h === gameState ? activeLogRef : undefined}
                   onClick={() => handleTimeTravel(i)}
                   className={`text-sm px-3 py-2 rounded font-mono border-l-2 cursor-pointer transition-colors ${
                     h === gameState 
@@ -754,7 +761,6 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
                   <span className={`${h === gameState ? 'text-indigo-400/60' : 'text-white/40'} w-8 inline-block`}>#{h.moves}</span> {h.lastAction}
                 </div>
               ))}
-              <div ref={logEndRef} />
             </>
           )}
         </div>
