@@ -34,7 +34,11 @@ Game hiện tại hỗ trợ 2 bộ luật chơi: **Classic** và **Default (New
    - Khi nuốt đủ số lượng (`elementCount`), thẻ Base được xem là "Đã đầy" (Full count). Thẻ Base đầy không tự biến mất ngay mà vẫn nằm lại trên Tableau chờ được kéo lên Foundation. Nếu chưa đầy, thẻ Base nằm đè lên vị trí đó và đợi "ăn" thêm.
 4. **Base kéo vào Ô trống:** Thẻ Base có thể kéo vào một cột Tableau trống.
 5. **Kéo lên Foundation:** CHỈ CÓ DUY NHẤT thẻ Base mới được phép kéo lên các ô Foundation. Thẻ Math tuyệt đối không được kéo lên đây. Thẻ Base có thể kéo lên Foundation bất cứ lúc nào (dù chưa đầy hay đã đầy count).
-6. **Cơ chế Super Reshuffle (Guaranteed Winnable):** Khi rơi vào trạng thái "bị kẹt" (không còn bất kỳ nước đi hợp lệ nào để lật thêm bài), hệ thống sẽ tự động kích hoạt Super Reshuffle. 
+6. **Định nghĩa trạng thái "Bị kẹt" (No available moves):** Hệ thống sẽ quét toàn diện và xác nhận kẹt nếu thỏa mãn ĐỒNG THỜI 3 điều kiện:
+   - Không thể di chuyển bất kỳ lá bài/cụm bài đang ngửa nào từ Tableau sang cột Tableau khác hoặc lên Foundation. *(Lưu ý: Hành động bưng toàn bộ 1 cột sang 1 cột trống khác không làm thay đổi thế bài, nên KHÔNG được tính là một nước đi hợp lệ để gỡ kẹt).*
+   - Lá bài đang lật ngửa ở Waste Pile không thể ghép vào bất kỳ đâu trên Tableau hay Foundation.
+   - Quét trước toàn bộ các lá bài còn nằm trong Nọc (Stock), KHÔNG có lá bài nào có thể tạo ra nước đi hợp lệ nếu nó được bốc ra.
+7. **Cơ chế Super Reshuffle (Guaranteed Winnable):** Khi rơi vào trạng thái "bị kẹt" (đã định nghĩa ở mục 6), hệ thống sẽ tự động kích hoạt Super Reshuffle. 
    **Giải thích thuật toán cho Dev (2 bước):**
    - **Bước 1: Trộn bài có chủ đích (Smart Shuffle)**
      - Gom toàn bộ bài đang úp ở Tableau và bài trong Stock/Waste thành một `pool`.
