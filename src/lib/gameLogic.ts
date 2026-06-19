@@ -55,7 +55,6 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
             sourceArray.splice(source.startIndex);
             const newDestCard = { ...destCard, absorbedCount: (destCard.absorbedCount || 0) + cardsToMove.length };
             destArray[destArray.length - 1] = newDestCard;
-            if (newDestCard.absorbedCount >= newDestCard.category.elementCount) destArray.pop();
           }
         } else {
           validMove = true;
@@ -70,9 +69,18 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
     }
   } else if (bottomCardToMove.kind === 1) {
     if (destArray.length === 0) {
-      validMove = true;
-      sourceArray.splice(source.startIndex);
-      destArray.push(...cardsToMove);
+      if (destType === 'foundation') {
+        if ((bottomCardToMove.absorbedCount || 0) >= bottomCardToMove.category.elementCount) {
+          validMove = true;
+        }
+      } else {
+        validMove = true;
+      }
+      
+      if (validMove) {
+        sourceArray.splice(source.startIndex);
+        destArray.push(...cardsToMove);
+      }
     } else if (gameRule === 'new' && destType === 'col') {
       const destCard = destArray[destArray.length - 1];
       if (destCard.kind === 0 && destCard.category.id === bottomCardToMove.category.id) {
@@ -86,9 +94,7 @@ export function computeDropState(prevState: GameState, source: any, destType: 'c
         destArray.splice(destArray.length - matchCount, matchCount);
         const newBaseCard = { ...bottomCardToMove, absorbedCount: (bottomCardToMove.absorbedCount || 0) + matchCount };
         sourceArray.splice(source.startIndex);
-        if (newBaseCard.absorbedCount < newBaseCard.category.elementCount) {
-          destArray.push(newBaseCard);
-        }
+        destArray.push(newBaseCard);
       }
     }
   }
