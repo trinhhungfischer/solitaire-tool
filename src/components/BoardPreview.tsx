@@ -235,12 +235,14 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
         const colContainer = cardElement.parentElement;
         if (colContainer) {
           const cardNodes = Array.from(colContainer.children);
-          const domIndex = cardNodes.indexOf(cardElement);
-          if (domIndex !== -1) {
-            for (let i = domIndex; i < cardNodes.length; i++) {
+          // The first child is the empty slot dropzone, so cards start at index 1
+          const rootDomIndex = source.startIndex + 1;
+          
+          if (rootDomIndex < cardNodes.length) {
+            for (let i = rootDomIndex; i < cardNodes.length; i++) {
                const clone = cardNodes[i].cloneNode(true) as HTMLElement;
                const currentTop = parseInt(clone.style.top || '0');
-               const firstTop = parseInt((cardNodes[domIndex] as HTMLElement).style.top || '0');
+               const firstTop = parseInt((cardNodes[rootDomIndex] as HTMLElement).style.top || '0');
                clone.style.top = `${currentTop - firstTop}px`;
                clone.style.left = '0px';
                clone.style.margin = '0px';
@@ -728,7 +730,18 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
                     draggable={isDraggable}
                     onDragStart={(e: any) => {
                       if (isDraggable) {
-                        handleDragStart(e, { type: 'col', index: colIndex, startIndex: cardIndex });
+                        let rootIndex = cardIndex;
+                        if (card.kind === 0) {
+                          while (rootIndex > 0) {
+                            const prevCard = colCards[rootIndex - 1];
+                            if (prevCard.isRevealed && prevCard.kind === 0 && prevCard.category.id === card.category.id) {
+                              rootIndex--;
+                            } else {
+                              break;
+                            }
+                          }
+                        }
+                        handleDragStart(e, { type: 'col', index: colIndex, startIndex: rootIndex });
                       } else {
                         e.preventDefault();
                       }
