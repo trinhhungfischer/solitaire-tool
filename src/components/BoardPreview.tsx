@@ -220,6 +220,47 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
   const handleDragStart = (e: React.DragEvent, source: any) => {
     e.dataTransfer.setData('text/plain', JSON.stringify(source));
     e.dataTransfer.effectAllowed = 'move';
+    
+    // Generate custom drag image for dragging a stack
+    if (source.type === 'col') {
+      const colCards = gameState?.cols[source.index];
+      if (colCards && source.startIndex < colCards.length - 1) {
+        const cardElement = e.currentTarget as HTMLElement;
+        const dragContainer = document.createElement('div');
+        dragContainer.style.position = 'absolute';
+        dragContainer.style.top = '-1000px';
+        dragContainer.style.left = '-1000px';
+        dragContainer.style.pointerEvents = 'none';
+        
+        const colContainer = cardElement.parentElement;
+        if (colContainer) {
+          const cardNodes = Array.from(colContainer.children);
+          const domIndex = cardNodes.indexOf(cardElement);
+          if (domIndex !== -1) {
+            for (let i = domIndex; i < cardNodes.length; i++) {
+               const clone = cardNodes[i].cloneNode(true) as HTMLElement;
+               const currentTop = parseInt(clone.style.top || '0');
+               const firstTop = parseInt((cardNodes[domIndex] as HTMLElement).style.top || '0');
+               clone.style.top = `${currentTop - firstTop}px`;
+               clone.style.left = '0px';
+               clone.style.margin = '0px';
+               // Remove dragging class from clones so they don't look weird
+               clone.classList.remove('cursor-grab', 'active:cursor-grabbing', 'hover:-translate-y-1');
+               dragContainer.appendChild(clone);
+            }
+            document.body.appendChild(dragContainer);
+            // Fallback to center if offsetX/Y are not available (e.g. mobile/touch)
+            const offsetX = e.nativeEvent.offsetX ?? 48;
+            const offsetY = e.nativeEvent.offsetY ?? 48;
+            e.dataTransfer.setDragImage(dragContainer, offsetX, offsetY);
+            
+            setTimeout(() => {
+              if (dragContainer.parentNode) document.body.removeChild(dragContainer);
+            }, 0);
+          }
+        }
+      }
+    }
   };
 
   const executeDrop = (destType: 'col' | 'foundation', destIndex: number, sourceStr: string) => {
