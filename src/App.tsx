@@ -34,7 +34,6 @@ function App() {
   const [isAutoPlaying, setIsAutoPlaying] = useState(false);
   const [autoPlaySpeed, setAutoPlaySpeed] = useState(500);
   const [autoPlayStrategy, setAutoPlayStrategy] = useState<'priority' | 'tree'>('priority');
-  const [gameRule, setGameRule] = useState<'default' | 'new'>('default');
   const [instantTrigger, setInstantTrigger] = useState(0);
   
   // Game Log Preserved State
