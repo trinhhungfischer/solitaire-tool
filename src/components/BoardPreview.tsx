@@ -372,13 +372,34 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
         return newCol;
       });
 
+      // Foundation Feeder Strategy: identify which Base cards are in the foundation (and not full)
+      const foundationCategoryIds = new Set<number>();
+      gameState.foundations.forEach(f => {
+        if (f.length > 0) {
+          const baseCard = f[f.length - 1];
+          if (baseCard.kind === 1 && (baseCard.absorbedCount || 0) < baseCard.category.elementCount) {
+            foundationCategoryIds.add(baseCard.category.id);
+          }
+        }
+      });
+
       // Shuffle pool first to randomize selections
       for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pool[i], pool[j]] = [pool[j], pool[i]];
       }
 
-      const remainingPool = [...pool];
+      const feederCards: typeof pool = [];
+      const remainingPool: typeof pool = [];
+
+      // Extract one Math card for each needed Foundation Base card
+      for (const card of pool) {
+        if (card.kind === 0 && foundationCategoryIds.has(card.category.id) && feederCards.findIndex(fc => fc.category.id === card.category.id) === -1) {
+          feederCards.push(card);
+        } else {
+          remainingPool.push(card);
+        }
+      }
 
       // Distribute back to unrevealed slots with Anti-Burying logic
       const finalCols = gameState.cols.map((oldCol, colIndex) => {
@@ -402,8 +423,13 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
         return newCol;
       });
 
-      // Place the rest into the draw pile randomly
-      const newDrawPile = remainingPool.map(c => ({ ...c, isRevealed: true }));
+      // Place the rest + feeder cards into the draw pile randomly
+      const finalDrawPool = [...feederCards, ...remainingPool];
+      for (let i = finalDrawPool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [finalDrawPool[i], finalDrawPool[j]] = [finalDrawPool[j], finalDrawPool[i]];
+      }
+      const newDrawPile = finalDrawPool.map(c => ({ ...c, isRevealed: true }));
 
       const actionText = isAutoTrigger ? 'Hệ thống: Hết nước đi -> 🔀 Tự động Super Reshuffle' : 'Người chơi: 🔀 Super Reshuffle';
       return { ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: actionText };
