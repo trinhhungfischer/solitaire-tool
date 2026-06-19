@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import type { CardData } from './CardBuilder';
-import { RefreshCw, Image as ImageIcon, Eye, EyeOff, Undo2, Shuffle, ClipboardList, X, HelpCircle } from 'lucide-react';
+import { RefreshCw, Image as ImageIcon, Eye, EyeOff, Undo2, Shuffle, ClipboardList, X, HelpCircle, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { computeDropState, checkHasAvailableMoves } from '../lib/gameLogic';
 import type { PlayableCard, GameState } from '../lib/gameLogic';
@@ -291,9 +291,18 @@ export default function BoardPreview({
                   return newCol;
                 });
 
+                const totalMixed = current.drawPile.length + current.wastePile.length + current.cols.reduce((sum, c) => sum + c.filter(card => !card.isRevealed).length, 0);
                 const newDrawPile = pool.map(c => ({ ...c, isRevealed: true }));
                 path.push(current);
-                current = { ...current, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: current.moves + 1, lastAction: 'Bot bị kẹt -> 🔀 Tự động Super Reshuffle' };
+                current = { 
+                  ...current, 
+                  cols: finalCols, 
+                  drawPile: newDrawPile, 
+                  wastePile: [], 
+                  moves: current.moves + 1, 
+                  lastAction: 'Bot bị kẹt -> 🔀 Tự động Super Reshuffle',
+                  actionDetails: `Đã trộn lại ngẫu nhiên ${totalMixed} lá bài (bao gồm các lá úp và Stock).` 
+                };
                 localCardsDrawn = 0;
                 reshuffleCount++;
                 totalReshufflesInInstant++;
@@ -319,6 +328,7 @@ export default function BoardPreview({
                 if (hasUnrevealed) {
                   const finalCols = current.cols.map(col => [...col]);
                   let extractedCard = null;
+                  let extractedCol = -1;
                   
                   for (let i = 0; i < finalCols.length; i++) {
                     const col = finalCols[i];
@@ -326,6 +336,7 @@ export default function BoardPreview({
                     if (hiddenIdx !== -1) {
                       extractedCard = col.splice(hiddenIdx, 1)[0];
                       extractedCard.isRevealed = true;
+                      extractedCol = i;
                       break;
                     }
                   }
@@ -337,7 +348,8 @@ export default function BoardPreview({
                       cols: finalCols,
                       wastePile: [extractedCard],
                       moves: current.moves + 1,
-                      lastAction: 'Bot bị kẹt & Hết Stock -> 🔄 Tự động Refill (Lấy 1 lá úp từ bàn)'
+                      lastAction: 'Bot bị kẹt & Hết Stock -> 🔄 Tự động Refill (Lấy 1 lá úp từ bàn)',
+                      actionDetails: `Đã lật lá [${extractedCard.value || extractedCard.wordImageKey || '?'}] từ cột ${extractedCol + 1} lên Waste pile.`
                     };
                     localCardsDrawn = 0;
                     steps++;
@@ -548,6 +560,7 @@ export default function BoardPreview({
       // REFILL LOGIC
       const finalCols = gameState.cols.map(col => [...col]);
       let extractedCard = null;
+      let extractedCol = -1;
       
       for (let i = 0; i < finalCols.length; i++) {
         const col = finalCols[i];
@@ -555,6 +568,7 @@ export default function BoardPreview({
         if (hiddenIdx !== -1) {
           extractedCard = col.splice(hiddenIdx, 1)[0];
           extractedCard.isRevealed = true;
+          extractedCol = i;
           break;
         }
       }
@@ -565,7 +579,8 @@ export default function BoardPreview({
           cols: finalCols,
           wastePile: [extractedCard],
           moves: gameState.moves + 1,
-          lastAction: isAutoTrigger ? 'Bot bị kẹt -> 🔄 Tự động Refill' : 'Người chơi: 🔄 Refill (Rút úp)'
+          lastAction: isAutoTrigger ? 'Bot bị kẹt -> 🔄 Tự động Refill' : 'Người chơi: 🔄 Refill (Rút úp)',
+          actionDetails: `Đã lật lá [${extractedCard.value || extractedCard.wordImageKey || '?'}] từ cột ${extractedCol + 1} lên Waste pile.`
         });
         return;
       }
@@ -631,10 +646,12 @@ export default function BoardPreview({
         });
 
         for (let i = 0; i < unrevealedCount; i++) {
-          let safeIndex = remainingPool.findIndex(c => !(c.kind === 0 && forbiddenCategories.has(c.category.id)));
-          if (safeIndex === -1) safeIndex = 0; // Fallback if no safe card exists
-          const card = remainingPool.splice(safeIndex, 1)[0];
-          newCol.push({ ...card, isRevealed: false });
+          if (remainingPool.length > 0) {
+            let safeIndex = remainingPool.findIndex(c => !(c.kind === 0 && forbiddenCategories.has(c.category.id)));
+            if (safeIndex === -1) safeIndex = 0; // Fallback if no safe card exists
+            const card = remainingPool.splice(safeIndex, 1)[0];
+            newCol.push({ ...card, isRevealed: false });
+          }
         }
         newCol.push(...faceUpCards);
         return newCol;
@@ -649,7 +666,10 @@ export default function BoardPreview({
       const newDrawPile = finalDrawPool.map(c => ({ ...c, isRevealed: true }));
 
       const actionText = isAutoTrigger ? 'Hệ thống: Hết nước đi -> 🔀 Tự động Super Reshuffle' : 'Người chơi: 🔀 Super Reshuffle';
-      return { ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: actionText };
+      const feederNames = feederCards.map(c => `[${c.value || c.wordImageKey || '?'}${c.category.name ? ` - ${c.category.name}` : ''}]`).join(', ');
+      const actionDetails = feederCards.length > 0 ? `Đã gom các lá bài ưu tiên (Feeder Cards): ${feederNames} đưa vào Stock. Tổng cộng đã trộn lại ${pool.length} lá bài.` : `Đã gom ${pool.length} lá bài úp và Stock để trộn lại ngẫu nhiên.`;
+      
+      return { ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: actionText, actionDetails };
     };
 
     const bestState = generateShuffle();
@@ -677,6 +697,38 @@ export default function BoardPreview({
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+  };
+
+  const handleExportLog = () => {
+    const fullTimeline = [...history, gameState, ...futureHistory];
+    let logText = "NHẬT KÝ NƯỚC ĐI SOLITAIRE\n";
+    logText += "================================\n\n";
+
+    fullTimeline.forEach((h, i) => {
+      if (h?.lastAction) {
+        logText += `[Bước ${h.moves}] ${h.lastAction}\n`;
+        if (h.actionDetails) {
+          logText += `   -> Chi tiết: ${h.actionDetails}\n`;
+        }
+        logText += "\n";
+      }
+    });
+
+    logText += "================================\n";
+    logText += `Tổng số bước: ${gameState?.moves || 0}\n`;
+    logText += `Tổng số lần Reshuffle: ${totalReshuffles}\n`;
+    logText += `Tổng số lần Refill: ${totalRefills}\n`;
+
+    const blob = new Blob([logText], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const dateStr = new Date().toISOString().replace(/T/, '_').replace(/:/g, '-').split('.')[0];
+    a.download = `solitaire_log_${dateStr}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   useEffect(() => {
@@ -1094,6 +1146,13 @@ export default function BoardPreview({
               Refills: {totalRefills}
             </span>
             <button 
+              onClick={handleExportLog}
+              className="p-1.5 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 rounded-lg transition-colors border border-emerald-500/30 ml-2"
+              title="Xuất nhật ký ra file text"
+            >
+              <Download className="w-5 h-5" />
+            </button>
+            <button 
               onClick={() => setShowLog(false)}
               className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/70 hover:text-white"
             >
@@ -1135,6 +1194,12 @@ export default function BoardPreview({
                         <span>{line}</span>
                       </div>
                     ))}
+                    {h.actionDetails && (
+                      <div className="flex items-start mt-1">
+                        <span className="w-10 shrink-0 inline-block"></span>
+                        <span className="text-xs text-indigo-300/80 italic">{h.actionDetails}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

@@ -13,6 +13,7 @@ export interface GameState {
   foundations: PlayableCard[][];
   moves: number;
   lastAction?: string;
+  actionDetails?: string;
 }
 
 export function computeDropState(prevState: GameState, source: any, destType: 'col' | 'foundation', destIndex: number, gameRule: string): GameState | null {
