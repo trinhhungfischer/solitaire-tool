@@ -31,13 +31,15 @@ Game hiện tại hỗ trợ 2 bộ luật chơi: **Classic** và **Default (New
    - Thẻ Math **KHÔNG ĐƯỢC** kéo thả lên thẻ Base.
    - Ngược lại, thẻ Base **ĐƯỢC PHÉP** nhấc lên và thả đè vào một cột có thẻ Math (cùng Category).
    - Khi đó, thẻ Base sẽ "nuốt trọn" (absorb) toàn bộ các thẻ Math đang ngửa của Category đó trên đỉnh cột. 
-   - Nếu nuốt đủ số lượng (`elementCount`), thẻ Base cần kéo lên **Foundation** sẽ bị huỷ. Nếu chưa đủ, thẻ Base sẽ nằm đè lên vị trí đó.
-4. **Base kéo vào Ô trống:** Thẻ Base có thể kéo vào một cột Tableau trống hoặc ô Foundation trống.
-5. **Auto Super Reshuffle:** Khi người chơi (hoặc Auto Play) rơi vào trạng thái "bị kẹt", hệ thống sẽ tự động kích hoạt **Super Reshuffle** để trộn lại toàn bộ các lá bài chưa lật ở Tableau và bài dư (Stock/Waste) nhằm gỡ bí. 
-   - **Định nghĩa trạng thái "Bị kẹt" (No available moves):** Hệ thống sẽ quét toàn diện và xác nhận kẹt nếu thỏa mãn ĐỒNG THỜI 3 điều kiện:
-     - Không thể di chuyển bất kỳ lá bài/cụm bài đang ngửa nào từ Tableau sang cột Tableau khác hoặc lên Foundation. *(Lưu ý: Hành động bưng toàn bộ 1 cột sang 1 cột trống khác không làm thay đổi thế bài, nên KHÔNG được tính là một nước đi hợp lệ để gỡ kẹt).*
-     - Lá bài đang lật ngửa ở Waste Pile không thể ghép vào bất kỳ đâu trên Tableau hay Foundation.
-     - Quét trước toàn bộ các lá bài còn nằm trong Nọc (Stock), KHÔNG có lá bài nào có thể tạo ra nước đi hợp lệ nếu nó được bốc ra.
+   - Khi nuốt đủ số lượng (`elementCount`), thẻ Base được xem là "Đã đầy" (Full count). Thẻ Base đầy không tự biến mất ngay mà vẫn nằm lại trên Tableau chờ được kéo lên Foundation. Nếu chưa đầy, thẻ Base nằm đè lên vị trí đó và đợi "ăn" thêm.
+4. **Base kéo vào Ô trống:** Thẻ Base có thể kéo vào một cột Tableau trống.
+5. **Kéo lên Foundation:** CHỈ CÓ DUY NHẤT thẻ Base mới được phép kéo lên các ô Foundation. Thẻ Math tuyệt đối không được kéo lên đây. Thẻ Base có thể kéo lên Foundation bất cứ lúc nào (dù chưa đầy hay đã đầy count).
+6. **Cơ chế Super Reshuffle (Guaranteed Winnable):** Khi người chơi (hoặc Auto Play) rơi vào trạng thái "bị kẹt", hệ thống sẽ tự động kích hoạt **Super Reshuffle** để trộn lại toàn bộ các lá bài chưa lật ở Tableau và bài dư (Stock/Waste). 
+   - **Định nghĩa "Bị kẹt":** Không có bất kỳ nước đi hợp lệ nào (kể cả bốc bài). Việc bưng 1 cột sang 1 cột trống khác không làm thay đổi thế bài nên không tính là nước đi hợp lệ.
+   - **Thuật toán trộn (Smart Heuristic + Verify):** 
+     - **Mớm bài (Feed the Board):** Hệ thống mớm sẵn thẻ Math tương ứng với các Base đang ngửa lên đầu Nọc.
+     - **Chống chôn (Anti-Burying):** Không rải thẻ Math úp xuống dưới thẻ Base cùng loại.
+     - **Verify:** Chạy thuật toán Quick Solve ngầm để đảm bảo ván bài trộn ra chắc chắn 100% có đường thắng rồi mới hiển thị cho người chơi.
 ---
 
 ## 3. Cơ chế Chia bài (Thứ tự cố định)
