@@ -372,13 +372,20 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
         return newCol;
       });
 
-      // Foundation Feeder Strategy: identify which Base cards are in the foundation (and not full)
-      const foundationCategoryIds = new Set<number>();
+      // Foundation Feeder Strategy: find the Base card closest to completion in foundation
+      let targetCategoryId: number | null = null;
+      let minRemaining = Infinity;
+
       gameState.foundations.forEach(f => {
         if (f.length > 0) {
           const baseCard = f[f.length - 1];
-          if (baseCard.kind === 1 && (baseCard.absorbedCount || 0) < baseCard.category.elementCount) {
-            foundationCategoryIds.add(baseCard.category.id);
+          if (baseCard.kind === 1) {
+            const absorbed = baseCard.absorbedCount || 0;
+            const remaining = baseCard.category.elementCount - absorbed;
+            if (remaining > 0 && remaining < minRemaining) {
+              minRemaining = remaining;
+              targetCategoryId = baseCard.category.id;
+            }
           }
         }
       });
@@ -392,9 +399,9 @@ export default function BoardPreview({ foundationCount, columnCards, data, maxMo
       const feederCards: typeof pool = [];
       const remainingPool: typeof pool = [];
 
-      // Extract one Math card for each needed Foundation Base card
+      // Extract ALL matching Math cards for the target Foundation Base card
       for (const card of pool) {
-        if (card.kind === 0 && foundationCategoryIds.has(card.category.id) && feederCards.findIndex(fc => fc.category.id === card.category.id) === -1) {
+        if (card.kind === 0 && targetCategoryId !== null && card.category.id === targetCategoryId) {
           feederCards.push(card);
         } else {
           remainingPool.push(card);

@@ -46,8 +46,8 @@ Game hiện tại hỗ trợ 2 bộ luật chơi: **Classic** và **Default (New
    **Giải thích thuật toán cho Dev (2 bước):**
    - **Bước 1: Trộn bài có chủ đích (Smart Shuffle)**
      - Gom toàn bộ bài đang úp ở Tableau và bài trong Stock/Waste thành một `pool` và trộn ngẫu nhiên.
-     - *Bơm bài cho Foundation:* Nếu trên ô Foundation có thẻ Base đang ngửa (chưa đầy), hệ thống sẽ trích xuất tương ứng 1 lá Math cho mỗi thẻ Base đó và ném ngẫu nhiên vào Draw Pile (đảm bảo chắc chắn có mồi trong Nọc).
-     - *Chống kẹt (Anti-Burying):* Rải bài vào các ô úp của Tableau. Lưu ý: Cột nào đang có thẻ Base ngửa thì **KHÔNG** rải thẻ Math cùng loại úp xuống dưới cột đó (tránh việc thẻ chìa khóa bị đè bởi chính ổ khóa). Các lá bài còn dư sẽ ném vào Draw Pile.
+     - *Bơm bài cho Foundation:* Nếu trên ô Foundation có các thẻ Base đang ngửa (chưa đầy), hệ thống sẽ tìm ra thẻ Base đang **sắp hoàn thành nhất**. Sau đó, nhặt TOÀN BỘ các thẻ Math tương ứng với thẻ Base đó ném ngẫu nhiên vào Draw Pile (đảm bảo chắc chắn có mồi trong Nọc để người chơi dứt điểm thẻ Base đó).
+     - _Chống kẹt (Anti-Burying):_ Rải bài vào các ô úp của Tableau. Lưu ý: Cột nào đang có thẻ Base ngửa thì **KHÔNG** rải thẻ Math cùng loại úp xuống dưới cột đó (tránh việc thẻ chìa khóa bị đè bởi chính ổ khóa). Các lá bài còn dư sẽ ném vào Draw Pile.
    - **Bước 2: Test ngầm (Auto-Verify)**
      - Check trong Stock sau khi được trộn, nếu chưa có bất kỳ lá bài Math nào có thể tạo ra nước đi hợp lệ, hệ thống sẽ quay lại bước 1 để trộn lại.
 
