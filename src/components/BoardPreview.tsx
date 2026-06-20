@@ -327,29 +327,29 @@ export default function BoardPreview({
                 const hasUnrevealed = current.cols.some(c => c.some(card => !card.isRevealed));
                 if (hasUnrevealed) {
                   const finalCols = current.cols.map(col => [...col]);
-                  let extractedCard = null;
-                  let extractedCol = -1;
+                  const extractedCards: PlayableCard[] = [];
+                  const extractedCols: number[] = [];
                   
                   for (let i = 0; i < finalCols.length; i++) {
                     const col = finalCols[i];
                     const hiddenIdx = col.findIndex(c => !c.isRevealed);
                     if (hiddenIdx !== -1) {
-                      extractedCard = col.splice(hiddenIdx, 1)[0];
-                      extractedCard.isRevealed = true;
-                      extractedCol = i;
-                      break;
+                      const card = col.splice(hiddenIdx, 1)[0];
+                      card.isRevealed = true;
+                      extractedCards.push(card);
+                      extractedCols.push(i + 1);
                     }
                   }
                   
-                  if (extractedCard) {
+                  if (extractedCards.length > 0) {
                     path.push(current);
                     current = {
                       ...current,
                       cols: finalCols,
-                      wastePile: [extractedCard],
+                      wastePile: extractedCards,
                       moves: current.moves + 1,
                       lastAction: 'Bot bị kẹt & Hết Stock -> 🔄 Tự động Refill (Lấy 1 lá úp từ bàn)',
-                      actionDetails: `Đã lật lá [${extractedCard.value || extractedCard.wordImageKey || '?'}] từ cột ${extractedCol + 1} lên Waste pile.`
+                      actionDetails: `Đã lật ${extractedCards.length} lá từ các cột ${extractedCols.join(', ')} lên Waste pile.`
                     };
                     localCardsDrawn = 0;
                     steps++;
@@ -559,28 +559,28 @@ export default function BoardPreview({
     if (gameState.drawPile.length === 0 && gameState.wastePile.length === 0 && hasUnrevealed) {
       // REFILL LOGIC
       const finalCols = gameState.cols.map(col => [...col]);
-      let extractedCard = null;
-      let extractedCol = -1;
+      const extractedCards: PlayableCard[] = [];
+      const extractedCols: number[] = [];
       
       for (let i = 0; i < finalCols.length; i++) {
         const col = finalCols[i];
         const hiddenIdx = col.findIndex(c => !c.isRevealed);
         if (hiddenIdx !== -1) {
-          extractedCard = col.splice(hiddenIdx, 1)[0];
-          extractedCard.isRevealed = true;
-          extractedCol = i;
-          break;
+          const card = col.splice(hiddenIdx, 1)[0];
+          card.isRevealed = true;
+          extractedCards.push(card);
+          extractedCols.push(i + 1);
         }
       }
       
-      if (extractedCard) {
+      if (extractedCards.length > 0) {
         setGameState({
           ...gameState,
           cols: finalCols,
-          wastePile: [extractedCard],
+          wastePile: extractedCards,
           moves: gameState.moves + 1,
           lastAction: isAutoTrigger ? 'Bot bị kẹt -> 🔄 Tự động Refill' : 'Người chơi: 🔄 Refill (Rút úp)',
-          actionDetails: `Đã lật lá [${extractedCard.value || extractedCard.wordImageKey || '?'}] từ cột ${extractedCol + 1} lên Waste pile.`
+          actionDetails: `Đã lật ${extractedCards.length} lá từ các cột ${extractedCols.join(', ')} lên Waste pile.`
         });
         return;
       }
