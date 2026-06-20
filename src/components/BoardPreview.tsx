@@ -99,7 +99,7 @@ export default function BoardPreview({
       return;
     }
     if (showLog && activeLogRef.current) {
-      activeLogRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      activeLogRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [gameState?.lastAction, showLog, history.length]);
 
@@ -536,9 +536,11 @@ export default function BoardPreview({
     }
   };
 
-  const handleTimeTravel = (historyIndex: number) => {
+  const handleTimeTravel = (historyIndex: number, shouldScroll: boolean = false) => {
     if (isAutoPlaying || !gameState) return;
-    isTimeTravelingRef.current = true;
+    if (!shouldScroll) {
+      isTimeTravelingRef.current = true;
+    }
     const fullTimeline = [...history, gameState, ...futureHistory];
     const targetState = fullTimeline[historyIndex];
     if (!targetState) return;
@@ -723,7 +725,13 @@ export default function BoardPreview({
     }
 
     if (nextIndex !== -1 && nextIndex !== currentIndex) {
-      handleTimeTravel(nextIndex);
+      handleTimeTravel(nextIndex, true);
+      // Fallback for immediate scroll in case effect doesn't trigger properly
+      setTimeout(() => {
+        if (activeLogRef.current) {
+          activeLogRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 50);
     }
   };
 
