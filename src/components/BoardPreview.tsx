@@ -299,7 +299,7 @@ export default function BoardPreview({
                   cols: finalCols, 
                   drawPile: newDrawPile, 
                   wastePile: [], 
-                  moves: current.moves + 1, 
+                  moves: current.moves, 
                   lastAction: 'Bot bị kẹt -> 🔀 Tự động Super Reshuffle',
                   actionDetails: `Đã trộn lại ngẫu nhiên ${totalMixed} lá bài (bao gồm các lá úp và Stock).` 
                 };
@@ -347,7 +347,7 @@ export default function BoardPreview({
                       ...current,
                       cols: finalCols,
                       wastePile: extractedCards,
-                      moves: current.moves + 1,
+                      moves: current.moves,
                       lastAction: 'Bot bị kẹt & Hết Stock -> 🔄 Tự động Refill (Lấy 1 lá úp từ bàn)',
                       actionDetails: `Đã lật ${extractedCards.length} lá từ các cột ${extractedCols.join(', ')} lên Waste pile.`
                     };
@@ -578,7 +578,7 @@ export default function BoardPreview({
           ...gameState,
           cols: finalCols,
           wastePile: extractedCards,
-          moves: gameState.moves + 1,
+          moves: gameState.moves,
           lastAction: isAutoTrigger ? 'Bot bị kẹt -> 🔄 Tự động Refill' : 'Người chơi: 🔄 Refill (Rút úp)',
           actionDetails: `Đã lật ${extractedCards.length} lá từ các cột ${extractedCols.join(', ')} lên Waste pile.`
         });
@@ -669,7 +669,7 @@ export default function BoardPreview({
       const feederNames = feederCards.map(c => `[${c.value || c.wordImageKey || '?'}${c.category.name ? ` - ${c.category.name}` : ''}]`).join(', ');
       const actionDetails = feederCards.length > 0 ? `Đã gom các lá bài ưu tiên (Feeder Cards): ${feederNames} đưa vào Stock. Tổng cộng đã trộn lại ${pool.length} lá bài.` : `Đã gom ${pool.length} lá bài úp và Stock để trộn lại ngẫu nhiên.`;
       
-      return { ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves + 1, lastAction: actionText, actionDetails };
+      return { ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves, lastAction: actionText, actionDetails };
     };
 
     const bestState = generateShuffle();
@@ -697,6 +697,34 @@ export default function BoardPreview({
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+  };
+
+  const handleJumpToEvent = (eventType: 'Reshuffle' | 'Refill') => {
+    const fullTimeline = [...history, gameState, ...futureHistory];
+    const currentIndex = history.length;
+    
+    // Find next event after current index
+    let nextIndex = -1;
+    for (let i = currentIndex + 1; i < fullTimeline.length; i++) {
+      if (fullTimeline[i]?.lastAction?.includes(eventType)) {
+        nextIndex = i;
+        break;
+      }
+    }
+    
+    // Wrap around if not found
+    if (nextIndex === -1) {
+      for (let i = 0; i <= currentIndex; i++) {
+        if (fullTimeline[i]?.lastAction?.includes(eventType)) {
+          nextIndex = i;
+          break;
+        }
+      }
+    }
+
+    if (nextIndex !== -1 && nextIndex !== currentIndex) {
+      handleTimeTravel(nextIndex);
+    }
   };
 
   const handleExportLog = () => {
@@ -1139,12 +1167,20 @@ export default function BoardPreview({
             Nhật Ký Nước Đi ({gameState?.moves || 0} bước)
           </h3>
           <div className="flex items-center gap-3">
-            <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-300 rounded font-mono border border-yellow-500/30" title="Tổng số lần Reshuffle">
+            <button 
+              onClick={() => handleJumpToEvent('Reshuffle')}
+              className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-300 rounded font-mono border border-yellow-500/30 hover:bg-yellow-500/30 transition-colors cursor-pointer" 
+              title="Click để nhảy đến lần Reshuffle tiếp theo"
+            >
               Reshuffles: {totalReshuffles}
-            </span>
-            <span className="text-xs px-2 py-1 bg-purple-500/20 text-purple-300 rounded font-mono border border-purple-500/30" title="Tổng số lần Refill">
+            </button>
+            <button 
+              onClick={() => handleJumpToEvent('Refill')}
+              className="text-xs px-2 py-1 bg-purple-500/20 text-purple-300 rounded font-mono border border-purple-500/30 hover:bg-purple-500/30 transition-colors cursor-pointer" 
+              title="Click để nhảy đến lần Refill tiếp theo"
+            >
               Refills: {totalRefills}
-            </span>
+            </button>
             <button 
               onClick={handleExportLog}
               className="p-1.5 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 rounded-lg transition-colors border border-emerald-500/30 ml-2"
@@ -1184,16 +1220,23 @@ export default function BoardPreview({
                   title={h === gameState ? "Hiện tại" : "Click để tua về thời điểm này"}
                 >
                   <div className="flex flex-col gap-1">
-                    {h.lastAction.split('\n').map((line, lineIdx) => (
-                      <div key={lineIdx} className="flex items-start">
-                        {lineIdx === 0 ? (
-                          <span className={`${h === gameState ? 'text-indigo-400/60' : 'text-white/40'} w-10 shrink-0 inline-block`}>#{h.moves}</span>
-                        ) : (
-                          <span className="w-10 shrink-0 inline-block"></span>
-                        )}
-                        <span>{line}</span>
-                      </div>
-                    ))}
+                    {h.lastAction.split('\n').map((line, lineIdx) => {
+                      const isSystemEvent = line.includes('Reshuffle') || line.includes('Refill');
+                      return (
+                        <div key={lineIdx} className="flex items-start">
+                          {lineIdx === 0 ? (
+                            isSystemEvent ? (
+                              <span className="w-10 shrink-0 inline-block text-white/30 text-xs mt-0.5">--</span>
+                            ) : (
+                              <span className={`${h === gameState ? 'text-indigo-400/60' : 'text-white/40'} w-10 shrink-0 inline-block`}>#{h.moves}</span>
+                            )
+                          ) : (
+                            <span className="w-10 shrink-0 inline-block"></span>
+                          )}
+                          <span>{line}</span>
+                        </div>
+                      );
+                    })}
                     {h.actionDetails && (
                       <div className="flex items-start mt-1">
                         <span className="w-10 shrink-0 inline-block"></span>
