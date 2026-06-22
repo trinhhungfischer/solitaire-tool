@@ -60,7 +60,7 @@ export default function CardBuilder({ levelId, data, onChange, selectedCardId }:
     }
   }, [data, onChange]);
 
-  const highlightTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const highlightedElementRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {

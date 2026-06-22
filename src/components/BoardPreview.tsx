@@ -668,7 +668,7 @@ export default function BoardPreview({
       const newDrawPile = finalDrawPool.map(c => ({ ...c, isRevealed: true }));
 
       const actionText = isAutoTrigger ? 'Hệ thống: Hết nước đi -> 🔀 Tự động Super Reshuffle' : 'Người chơi: 🔀 Super Reshuffle';
-      const feederNames = feederCards.map(c => `[${c.value || c.wordImageKey || '?'}${c.category.name ? ` - ${c.category.name}` : ''}]`).join(', ');
+      const feederNames = feederCards.map(c => `[${c.wordText || c.wordImageKey || '?'}${c.category.displayName ? ` - ${c.category.displayName}` : ''}]`).join(', ');
       const actionDetails = feederCards.length > 0 ? `Đã gom các lá bài ưu tiên (Feeder Cards): ${feederNames} đưa vào Stock. Tổng cộng đã trộn lại ${pool.length} lá bài.` : `Đã gom ${pool.length} lá bài úp và Stock để trộn lại ngẫu nhiên.`;
       
       return { ...gameState, cols: finalCols, drawPile: newDrawPile, wastePile: [], moves: gameState.moves, lastAction: actionText, actionDetails };
@@ -740,7 +740,7 @@ export default function BoardPreview({
     let logText = "NHẬT KÝ NƯỚC ĐI SOLITAIRE\n";
     logText += "================================\n\n";
 
-    fullTimeline.forEach((h, i) => {
+    fullTimeline.forEach((h) => {
       if (h?.lastAction) {
         logText += `[Bước ${h.moves}] ${h.lastAction}\n`;
         if (h.actionDetails) {
@@ -931,7 +931,6 @@ export default function BoardPreview({
             >
               <AnimatePresence>
                 {gameState.drawPile.map((card, idx) => {
-                  const isFaceUp = isEditorMode; // In editor mode, stock cards are face up
                   const col = Math.floor(idx / 18);
                   const row = idx % 18;
                   const isCovered = row < 17 && idx < gameState.drawPile.length - 1; // Covered if not the last card in the column or pile
