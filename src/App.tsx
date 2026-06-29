@@ -40,8 +40,8 @@ function App() {
   const [showLog, setShowLog] = useState(false);
   const [logHeight, setLogHeight] = useState(300);
 
-  // Resizable sidebar state
   const [sidebarWidth, setSidebarWidth] = useState(typeof window !== 'undefined' ? window.innerWidth / 3 : 400);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -275,19 +275,19 @@ function App() {
     <div className="flex flex-col h-screen bg-slate-100 overflow-hidden text-slate-800">
       
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center z-10 shadow-sm shrink-0">
-        <div className="flex items-center gap-6">
-          <h1 className="text-xl font-bold text-solitaire-green flex items-center gap-2">
-            <LayoutGrid className="w-6 h-6" />
-            Level Editor
+      <header className="bg-white border-b border-slate-200 px-4 md:px-6 py-3 md:py-4 flex justify-between items-center z-10 shadow-sm shrink-0 flex-wrap gap-3">
+        <div className="flex items-center gap-4 md:gap-6 w-full md:w-auto">
+          <h1 className="text-lg md:text-xl font-bold text-solitaire-green flex items-center gap-2">
+            <LayoutGrid className="w-5 h-5 md:w-6 md:h-6" />
+            <span className="hidden md:inline">Level Editor</span>
           </h1>
           
-          <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-            <span className="text-sm font-medium text-slate-600">Select Level:</span>
+          <div className="flex items-center gap-2 bg-slate-100 px-2 py-1 md:px-3 md:py-1.5 rounded-lg border border-slate-200 flex-1 md:flex-none">
+            <span className="text-xs md:text-sm font-medium text-slate-600 hidden sm:inline">Select Level:</span>
             <select 
               value={selectedLevelId}
               onChange={(e) => setSelectedLevelId(parseInt(e.target.value))}
-              className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer"
+              className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer text-sm md:text-base w-full md:w-auto"
             >
               {levelIds.map(id => (
                 <option key={id} value={id}>Level {id}</option>
@@ -296,14 +296,21 @@ function App() {
           </div>
           
           {levelData && (
-            <div className="flex gap-4 text-sm text-slate-500 ml-4 border-l pl-4 border-slate-300">
+            <div className="hidden md:flex gap-4 text-sm text-slate-500 ml-4 border-l pl-4 border-slate-300">
               <span>Cards: <strong className="text-slate-700">{levelData.data.length}</strong></span>
               <span>Foundations: <strong className="text-slate-700">{levelData.foundationCount}</strong></span>
             </div>
           )}
+          
+          <button 
+            className="md:hidden ml-auto p-2 rounded-lg bg-slate-100 text-slate-700 border border-slate-200"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          >
+            <Settings2 className="w-5 h-5" />
+          </button>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 custom-scrollbar">
           <button
             onClick={() => setIsEditorMode(!isEditorMode)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors border ${isEditorMode ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}
@@ -398,12 +405,20 @@ function App() {
 
         {/* Right: Config Sidebar */}
         <div 
-          className="shrink-0 bg-slate-50 border-l border-slate-200 overflow-y-auto flex flex-col shadow-xl z-10 relative"
-          style={{ width: `${sidebarWidth}px` }}
+          className={`shrink-0 bg-slate-50 border-l border-slate-200 overflow-y-auto flex-col shadow-xl z-30 ${isSidebarOpen ? 'flex absolute inset-0 md:relative' : 'hidden md:flex relative'}`}
+          style={{ width: isSidebarOpen && typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : `${sidebarWidth}px` }}
         >
-          {/* Drag Handle */}
+          {/* Close button on mobile */}
+          <div className="md:hidden flex justify-between items-center p-4 border-b border-slate-200 bg-white sticky top-0 z-10">
+            <h2 className="font-bold text-slate-800 flex items-center gap-2"><Settings2 className="w-5 h-5"/> Config</h2>
+            <button onClick={() => setIsSidebarOpen(false)} className="p-2 bg-slate-100 rounded-lg text-slate-600 hover:text-red-500">
+              Close
+            </button>
+          </div>
+
+          {/* Drag Handle (Desktop only) */}
           <div 
-            className="absolute left-0 top-0 bottom-0 w-1.5 hover:bg-solitaire-green/50 cursor-col-resize z-50 group transition-colors"
+            className="hidden md:block absolute left-0 top-0 bottom-0 w-1.5 hover:bg-solitaire-green/50 cursor-col-resize z-50 group transition-colors"
             onMouseDown={handleMouseDown}
           >
             <div className="absolute top-1/2 -left-2 w-4 h-8 -mt-4 flex items-center justify-center opacity-0 group-hover:opacity-100">

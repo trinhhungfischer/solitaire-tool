@@ -56,6 +56,7 @@ export default function BoardPreview({
   const [cardsDrawnSinceLastMove, setCardsDrawnSinceLastMove] = useState(0);
   const [autoReshuffleCount, setAutoReshuffleCount] = useState(0);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const activeLogRef = useRef<HTMLDivElement>(null);
   const isTimeTravelingRef = useRef(false);
 
@@ -107,6 +108,7 @@ export default function BoardPreview({
     if (!isAutoPlaying) {
       setAutoReshuffleCount(0);
     }
+    setSelectedSource(null);
   }, [isAutoPlaying]);
 
   useEffect(() => {
@@ -527,12 +529,58 @@ export default function BoardPreview({
     e.dataTransfer.dropEffect = 'move';
   };
 
+  const handleTap = (type: 'col' | 'waste' | 'foundation', index: number, startIndex: number, isDraggable: boolean, e: React.MouseEvent) => {
+    if (isEditorMode) return;
+    e.stopPropagation();
+
+    if (!selectedSource) {
+      if (isDraggable) {
+        const source = { type, index, startIndex };
+        setSelectedSource(JSON.stringify(source));
+      }
+    } else {
+      const sourceObj = JSON.parse(selectedSource);
+      if (sourceObj.type === type && sourceObj.index === index && sourceObj.startIndex === startIndex) {
+        setSelectedSource(null); // toggle off
+        return;
+      }
+      
+      if (type === 'waste') {
+        if (isDraggable) {
+          const source = { type, index, startIndex };
+          setSelectedSource(JSON.stringify(source));
+        } else {
+          setSelectedSource(null);
+        }
+        return;
+      }
+
+      const destType = type === 'foundation' ? 'foundation' : 'col';
+      const prevGameState = gameState;
+      const newState = computeDropState(gameState!, sourceObj, destType, index, gameRule);
+      if (newState) {
+        setHistory(h => [...h, prevGameState!]);
+        setFutureHistory([]);
+        setGameState(newState);
+        setSelectedSource(null);
+      } else {
+        if (isDraggable) {
+          const source = { type, index, startIndex };
+          setSelectedSource(JSON.stringify(source));
+        } else {
+          setSelectedSource(null);
+        }
+      }
+    }
+  };
+
   const handleUndo = () => {
     if (history.length > 0 && !isAutoPlaying) {
       const prevState = history[history.length - 1];
       setFutureHistory(prev => [gameState!, ...prev]);
       setGameState(prevState);
       setHistory(history.slice(0, -1));
+      setSelectedSource(null);
     }
   };
 
@@ -549,6 +597,7 @@ export default function BoardPreview({
     setGameState(targetState);
     setFutureHistory(fullTimeline.slice(historyIndex + 1));
     setCardsDrawnSinceLastMove(0);
+    setSelectedSource(null);
   };
 
   const handleReshuffle = (isAutoTrigger = false) => {
@@ -859,8 +908,18 @@ export default function BoardPreview({
   const stockColsCount = Math.ceil(gameState.drawPile.length / 18);
   const extraLeftSpace = isEditorMode && stockColsCount > 1 ? (stockColsCount - 1) * 112 : 0;
 
+  const isCardSelected = (type: string, index: number, cardIndex: number) => {
+    if (!selectedSource) return false;
+    try {
+      const s = JSON.parse(selectedSource);
+      if (type === 'col' && s.type === 'col' && s.index === index && cardIndex >= s.startIndex) return true;
+      if (type === s.type && index === s.index && cardIndex === s.startIndex) return true;
+    } catch(e) {}
+    return false;
+  };
+
   return (
-    <div className="relative w-full h-full bg-[#1A4E2B] overflow-hidden flex flex-col p-6 font-sans">
+    <div className="relative w-full h-full bg-[#1A4E2B] overflow-hidden flex flex-col p-6 font-sans touch-manipulation" onClick={() => setSelectedSource(null)}>
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-3">
         <div className="bg-[#143d22]/80 backdrop-blur-sm p-1.5 rounded-xl border border-white/10 flex flex-col gap-1 shadow-lg">
           <button 
@@ -984,6 +1043,7 @@ export default function BoardPreview({
                   
                   const isTop = idx === arr.length - 1;
                   const visualIdx = 2 - displayIdx;
+                  const isSelected = isCardSelected('waste', 0, gameState.wastePile.length - 1);
                   
                   return (
                     <motion.div 
@@ -995,10 +1055,12 @@ export default function BoardPreview({
                       className={`w-24 h-36 rounded-lg shadow-[0_4px_10px_rgba(0,0,0,0.3)] absolute top-0 
                         ${isTop ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1' : ''}
                         ${card.kind === 1 ? 'bg-amber-50 border-amber-300 border-2' : 'bg-white border-slate-200 border'}
+                        ${isSelected && isTop ? 'ring-4 ring-green-400 ring-offset-2 ring-offset-[#1A4E2B] z-50' : ''}
                       `}
-                      style={{ left: `${(arr.length <= 3 ? idx : visualIdx) * 20}px`, zIndex: idx }}
+                      style={{ left: `${(arr.length <= 3 ? idx : visualIdx) * 20}px`, zIndex: isSelected && isTop ? 100 : idx }}
                       draggable={isTop}
                       onDragStart={isTop ? (e: any) => handleDragStart(e, { type: 'waste', startIndex: gameState.wastePile.length - 1 }) : undefined}
+                      onClick={!isEditorMode && isTop ? (e: any) => handleTap('waste', 0, gameState.wastePile.length - 1, isTop, e) : undefined}
                     >
                       {renderCard(card, !isTop, 'horizontal')}
                     </motion.div>
@@ -1016,16 +1078,18 @@ export default function BoardPreview({
             <div key={i} className="w-24 relative">
               {i === 0 && <div className="absolute -top-7 left-0 right-0 text-center text-[12px] font-bold text-white/50 tracking-widest uppercase whitespace-nowrap">Foundation</div>}
               <div 
-                className="w-24 h-36 rounded-lg border-2 border-white/20 bg-[#143d22]/50 flex items-center justify-center relative"
+                className="w-24 h-36 rounded-lg border-2 border-white/20 bg-[#143d22]/50 flex items-center justify-center relative cursor-pointer"
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDropOnFoundation(e, i)}
+                onClick={!isEditorMode ? (e) => handleTap('foundation', i, 0, false, e) : undefined}
               >
                 {foundCards.length === 0 ? (
-                  <span className="text-white/20 text-3xl font-black">A</span>
+                  <span className="text-white/20 text-3xl font-black pointer-events-none">A</span>
                 ) : (
                   <AnimatePresence>
                     {foundCards.map((card, cardIndex) => {
                       const isTop = cardIndex === foundCards.length - 1;
+                      const isSelected = isCardSelected('foundation', i, cardIndex);
                       return (
                         <motion.div 
                           key={card.id}
@@ -1036,10 +1100,12 @@ export default function BoardPreview({
                           className={`w-24 h-36 rounded-lg shadow-[0_4px_10px_rgba(0,0,0,0.3)] absolute top-0 left-0 
                             ${isTop ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1' : ''}
                             ${card.kind === 1 ? 'bg-amber-50 border-amber-300 border-2' : 'bg-white border-slate-200 border'}
+                            ${isSelected && isTop ? 'ring-4 ring-green-400 ring-offset-2 ring-offset-[#1A4E2B] z-50' : ''}
                           `}
-                          style={{ zIndex: cardIndex }}
+                          style={{ zIndex: isSelected && isTop ? 100 : cardIndex }}
                           draggable={isTop}
                           onDragStart={isTop ? (e: any) => handleDragStart(e, { type: 'foundation', index: i, startIndex: foundCards.length - 1 }) : undefined}
+                          onClick={!isEditorMode ? (e: any) => handleTap('foundation', i, foundCards.length - 1, isTop, e) : undefined}
                         >
                           {renderCard(card, false, 'none')}
                         </motion.div>
@@ -1064,7 +1130,10 @@ export default function BoardPreview({
               onDrop={(e) => handleDropOnCol(e, colIndex)}
             >
               {/* Column Drop Zone (Empty slot) */}
-              <div className="w-24 h-36 rounded-lg border-2 border-white/10 bg-[#143d22]/30 absolute top-0 left-0" />
+              <div 
+                className="w-24 h-36 rounded-lg border-2 border-white/10 bg-[#143d22]/30 absolute top-0 left-0 cursor-pointer" 
+                onClick={!isEditorMode ? (e) => handleTap('col', colIndex, 0, false, e) : undefined}
+              />
               
               {/* Cards in Column */}
               <AnimatePresence>
@@ -1088,6 +1157,8 @@ export default function BoardPreview({
                   isDraggable = isValidStack;
                 }
 
+                const isSelected = isCardSelected('col', colIndex, cardIndex);
+
                 return (
                   <motion.div 
                     key={card.id}
@@ -1099,8 +1170,9 @@ export default function BoardPreview({
                     className={`w-24 h-36 rounded-lg shadow-[0_4px_10px_rgba(0,0,0,0.3)] absolute top-0 left-0 flex flex-col 
                       ${isDraggable ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1' : ''}
                       ${isFaceUp ? (card.kind === 1 ? 'bg-amber-50 border-amber-300 border-2' : 'bg-white border-slate-200 border') : 'bg-blue-800 border-2 border-white/20'}
+                      ${isSelected ? 'ring-4 ring-green-400 ring-offset-2 ring-offset-[#1A4E2B] z-50' : ''}
                     `}
-                    style={{ top: `${cardIndex * 32}px`, zIndex: cardIndex }}
+                    style={{ top: `${cardIndex * 32}px`, zIndex: isSelected ? cardIndex + 100 : cardIndex }}
                     draggable={isDraggable}
                     onDragStart={(e: any) => {
                       if (isEditorMode) {
@@ -1131,7 +1203,20 @@ export default function BoardPreview({
                       if (sourceId && onSwapCards) onSwapCards(sourceId, card.__id!);
                     } : undefined}
                     onDragOver={isEditorMode ? (e) => e.preventDefault() : undefined}
-                    onClick={isEditorMode ? (e) => { e.stopPropagation(); if (onCardClick) onCardClick(card.__id!); } : undefined}
+                    onClick={isEditorMode ? (e) => { e.stopPropagation(); if (onCardClick) onCardClick(card.__id!); } : (e: any) => {
+                      let rootIndex = cardIndex;
+                      if (isDraggable && card.kind === 0) {
+                        while (rootIndex > 0) {
+                          const prevCard = colCards[rootIndex - 1];
+                          if (prevCard.isRevealed && prevCard.kind === 0 && prevCard.category.id == card.category.id) {
+                            rootIndex--;
+                          } else {
+                            break;
+                          }
+                        }
+                      }
+                      handleTap('col', colIndex, rootIndex, isDraggable, e);
+                    }}
                   >
                     {isFaceUp ? renderCard(card, !isTopCard, 'vertical') : (
                       <div className="absolute inset-0 rounded-md border border-white/20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-700 to-blue-900 m-1 flex items-center justify-center">
